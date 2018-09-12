@@ -51,10 +51,9 @@ class AccountTransferService[F[_]](
     toAccount.copy(balance = toAccount.balance + transferAmount)
 
   private def updatedLogMessage(before: CurrencyAccount, after: CurrencyAccount) = {
-    val currency  = before.currency.symbol
     val formatter = new DecimalFormat("#.##")
-    s"Updated Account: ${before.iban}: Balance updated from $currency${formatter.format(before.balance)} " +
-    s"to $currency${formatter.format(after.balance)}"
+    s"Updated Account: ${before.iban}: Balance updated from ${formatter.format(before.balance)} " +
+    s"to ${formatter.format(after.balance)}"
   }
 
   private def hasSufficientBalance(account: CurrencyAccount,

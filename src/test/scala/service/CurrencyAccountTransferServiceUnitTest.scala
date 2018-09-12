@@ -1,11 +1,12 @@
 package service
 
 import cats.implicits._
-import model.{ Currency, CurrencyAccount }
-import org.scalatest.{ FreeSpec, Matchers }
+import model.{Currency, CurrencyAccount}
+import org.scalatest.{FreeSpec, Matchers}
 
 import scala.collection.mutable
-import scala.util.{ Success, Try }
+import scala.collection.mutable.ArrayBuffer
+import scala.util.{Success, Try}
 
 class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
 
@@ -17,94 +18,104 @@ class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
         results.filter(_.iban == accountWithPositiveFunds).head.iban shouldBe positiveAccount.iban
       }
 
-      "transferBetweenAccounts should update both accounts if sufficient funds are present" in new TestSuite {
-        transferService.accountTransfer(accountWithPositiveFunds, accountWithGBP, 5)
+      "transferBetweenAccounts should " - {
+        "update both accounts if sufficient funds are present" in new TestSuite {
+          transferService.accountTransfer(accountWithPositiveFunds, accountWithGBP, 5)
 
-        val updatedAccount1: CurrencyAccount =
-          gateway.getAccount(accountWithPositiveFunds).get.right.get
+          val updatedAccount1: CurrencyAccount =
+            gateway.getAccount(accountWithPositiveFunds).get.right.get
 
-        val updatedAccount2: CurrencyAccount =
-          gateway.getAccount(accountWithGBP).get.right.get
+          val updatedAccount2: CurrencyAccount =
+            gateway.getAccount(accountWithGBP).get.right.get
 
-        updatedAccount1.balance shouldBe 95.0
-        updatedAccount2.balance shouldBe 205.0
-      }
+          updatedAccount1.balance shouldBe 95.0
+          updatedAccount2.balance shouldBe 205.0
 
-      "transferBetweenAccounts should allow multiple payments" in new TestSuite {
+          log.exists(f => f.contains("£100 to £95"))
+          log.exists(f => f.contains("£200 to £205"))
+        }
 
-        //accuntWithPositiveFunds starts with 100
-        //accountWithGBP starts with 200
-        transferService.accountTransfer(accountWithPositiveFunds, accountWithGBP, 10)
-        transferService.accountTransfer(accountWithPositiveFunds, accountWithGBP, 10)
-        transferService.accountTransfer(accountWithPositiveFunds, accountWithGBP, 10)
-        transferService.accountTransfer(accountWithPositiveFunds, accountWithGBP, 10)
-        transferService.accountTransfer(accountWithPositiveFunds, accountWithGBP, 10)
+        "allow multiple payments" in new TestSuite {
 
-        val updatedAccount1: CurrencyAccount =
-          gateway.getAccount(accountWithPositiveFunds).get.right.get
+          //accuntWithPositiveFunds starts with 100
+          //accountWithGBP starts with 200
+          transferService.accountTransfer(accountWithPositiveFunds, accountWithGBP, 10)
+          transferService.accountTransfer(accountWithPositiveFunds, accountWithGBP, 10)
+          transferService.accountTransfer(accountWithPositiveFunds, accountWithGBP, 10)
+          transferService.accountTransfer(accountWithPositiveFunds, accountWithGBP, 10)
+          transferService.accountTransfer(accountWithPositiveFunds, accountWithGBP, 10)
 
-        val updatedAccount2: CurrencyAccount =
-          gateway.getAccount(accountWithGBP).get.right.get
+          val updatedAccount1: CurrencyAccount =
+            gateway.getAccount(accountWithPositiveFunds).get.right.get
 
-        updatedAccount1.balance shouldBe 50
-        updatedAccount2.balance shouldBe 250
-      }
+          val updatedAccount2: CurrencyAccount =
+            gateway.getAccount(accountWithGBP).get.right.get
 
-      "transferBetweenAccounts should not transfer funds when an account does not exist" in new TestSuite {
-        val nonExistingAccount = "SOME_NON_EXISTING_ACCOUNT"
-        val gatewayError: TransferServiceErrors =
-          transferService.accountTransfer(nonExistingAccount, accountWithGBP, 2).get.left.get
-        gatewayError.toString shouldBe AccountDoesNotExist.toString
-      }
+          updatedAccount1.balance shouldBe 50
+          updatedAccount2.balance shouldBe 250
 
-      "transferBetweenAccounts should not transfer funds when there is no account to transfer to" in new TestSuite {
-        val nonExistingAccount = "SOME_NON_EXISTING_ACCOUNT"
-        val gatewayError: TransferServiceErrors =
-          transferService
-            .accountTransfer(accountWithPositiveFunds, nonExistingAccount, 2)
+          log.exists(f => f.contains("£100 to £90"))
+          log.exists(f => f.contains("£80 to £70"))
+        }
+
+        "not transfer funds when an account does not exist" in new TestSuite {
+          val nonExistingAccount = "SOME_NON_EXISTING_ACCOUNT"
+          val gatewayError: TransferServiceErrors =
+            transferService.accountTransfer(nonExistingAccount, accountWithGBP, 2).get.left.get
+          gatewayError.toString shouldBe AccountDoesNotExist.toString
+        }
+
+        "transferBetweenAccounts should not transfer funds when there is no account to transfer to" in new TestSuite {
+          val nonExistingAccount = "SOME_NON_EXISTING_ACCOUNT"
+          val gatewayError: TransferServiceErrors =
+            transferService
+              .accountTransfer(accountWithPositiveFunds, nonExistingAccount, 2)
+              .get
+              .left
+              .get
+          gatewayError.toString shouldBe AccountDoesNotExist.toString
+          gateway.getAccount(accountWithPositiveFunds).get.right.get.balance shouldBe 100.0
+        }
+
+        "not transfer when funds are not sufficient" in new TestSuite {
+          val result: Either[TransferServiceErrors, Unit] = transferService
+            .accountTransfer(accountWithNegativeFunds, accountWithPositiveFunds, 200)
             .get
-            .left
+
+          gateway.getAccount(accountWithNegativeFunds).get.right.get.balance shouldBe -19.99
+          gateway.getAccount(accountWithPositiveFunds).get.right.get.balance shouldBe 100
+          result.left.get.toString shouldBe AccountHasInsufficientFunds.toString
+        }
+
+        "not be able to transfer between the same account" in new TestSuite {
+          val result: Either[TransferServiceErrors, Unit] = transferService
+            .accountTransfer(accountWithPositiveFunds, accountWithPositiveFunds, 30)
             .get
-        gatewayError.toString shouldBe AccountDoesNotExist.toString
-        gateway.getAccount(accountWithPositiveFunds).get.right.get.balance shouldBe 100.0
-      }
 
-      "transferBetweenAccounts should not transfer when funds are not sufficient" in new TestSuite {
-        val result: Either[TransferServiceErrors, Unit] = transferService
-          .accountTransfer(accountWithNegativeFunds, accountWithPositiveFunds, 200)
-          .get
+          result.left.get.toString shouldBe CannotTransferToSameAccount.toString
+          gateway.getAccount(accountWithPositiveFunds).get.right.get.balance shouldBe 100
+        }
 
-        gateway.getAccount(accountWithNegativeFunds).get.right.get.balance shouldBe -19.99
-        gateway.getAccount(accountWithPositiveFunds).get.right.get.balance shouldBe 100
-        result.left.get.toString shouldBe AccountHasInsufficientFunds.toString
-      }
+        "not be able to transfer between different currencies" in new TestSuite {
+          val result: Either[TransferServiceErrors, Unit] =
+            transferService.accountTransfer(accountWithGBP, accountWithEur, 30).get
 
-      "transferBetweenAccounts should not be able to transfer between the same account" in new TestSuite {
-        val result: Either[TransferServiceErrors, Unit] = transferService
-          .accountTransfer(accountWithPositiveFunds, accountWithPositiveFunds, 30)
-          .get
-
-        result.left.get.toString shouldBe CannotTransferToSameAccount.toString
-        gateway.getAccount(accountWithPositiveFunds).get.right.get.balance shouldBe 100
-      }
-
-      "transferBetweenAccounts should not be able to transfer between different currencies" in new TestSuite {
-        val result: Either[TransferServiceErrors, Unit] =
-          transferService.accountTransfer(accountWithGBP, accountWithEur, 30).get
-
-        result.left.get.toString shouldBe CannotTransferToAccountWithDifferentCurrency.toString
+          result.left.get.toString shouldBe CannotTransferToAccountWithDifferentCurrency.toString
+        }
       }
     }
   }
 
   private class TestSuite() extends TransferServiceErrors {
 
+    val log: ArrayBuffer[String] = ArrayBuffer.empty[String]
+
     class testLogger extends LoggingAlg[Try] {
-      override def info(msg: String): Try[Unit] = Success(println(msg))
+      override def info(msg: String): Try[Unit] = Success(log.append(msg))
 
-      override def warn(msg: String): Try[Unit] = Success(println(msg))
+      override def warn(msg: String): Try[Unit] = Success(log.append(msg))
 
-      override def error(msg: String, ex: Throwable): Try[Unit] = Success(println(s"$msg: $ex"))
+      override def error(msg: String, ex: Throwable): Try[Unit] = Success(log.append(s"$msg: $ex"))
     }
 
     lazy val gateway: AccountGatewayAlg[Try] = testGateway(accounts)
@@ -112,13 +123,13 @@ class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
     lazy val transferService = new AccountTransferService[Try](gateway, new testLogger)
 
     val accountWithPositiveFunds = "ACCOUNT_WITH_POSITIVE"
-    val positiveAccount          = CurrencyAccount(accountWithPositiveFunds, 100, Currency.GBP)
+    val positiveAccount = CurrencyAccount(accountWithPositiveFunds, 100, Currency.GBP)
 
     val accountWithGBP = "ACCOUNT_WITH_GBP"
-    val GBPAccount     = CurrencyAccount(accountWithGBP, 200, Currency.GBP)
+    val GBPAccount = CurrencyAccount(accountWithGBP, 200, Currency.GBP)
 
     val accountWithEur = "ACCOUNT_WITH_EUR"
-    val EURAccount     = CurrencyAccount(accountWithEur, 503.4, Currency.EUR)
+    val EURAccount = CurrencyAccount(accountWithEur, 503.4, Currency.EUR)
 
     val accountWithNegativeFunds = "ACCOUNT_WITH_NEGATIVE_FUNDS"
     val negativeAccount =
@@ -126,8 +137,8 @@ class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
 
     val accounts = mutable.Map(
       accountWithPositiveFunds -> positiveAccount,
-      accountWithGBP           -> GBPAccount,
-      accountWithEur           -> EURAccount,
+      accountWithGBP -> GBPAccount,
+      accountWithEur -> EURAccount,
       accountWithNegativeFunds -> negativeAccount
     )
 
@@ -138,10 +149,9 @@ class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
         override def getAccount(iban: String): Try[Either[TransferServiceErrors, CurrencyAccount]] =
           Success(accounts.get(iban).map(Right(_)).getOrElse(Left(AccountDoesNotExist)))
 
-        override def updateAccount(
-            account: CurrencyAccount
-        ): Try[Either[TransferServiceErrors, Unit]] =
+        override def updateAccount(account: CurrencyAccount): Try[Either[TransferServiceErrors, Unit]] =
           Success(Right(accounts.update(account.iban, account)))
       }
   }
+
 }

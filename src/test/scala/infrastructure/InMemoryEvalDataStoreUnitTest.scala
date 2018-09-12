@@ -1,10 +1,11 @@
 package infrastructure
 
 import infrastructure.dataStores.InMemoryEvalDataStore
-import model.{ Currency, CurrencyAccount }
-import org.scalatest.{ FreeSpec, Matchers }
+import model.{Currency, CurrencyAccount}
+import org.scalatest.{FreeSpec, Matchers}
+import service.TransferServiceErrors
 
-class InMemoryEvalDataStoreUnitTest extends FreeSpec with Matchers {
+class InMemoryEvalDataStoreUnitTest extends FreeSpec with Matchers with  TransferServiceErrors{
 
   "InMemoryAccountDataStore" - {
     "ListAllAccounts should list accounts correctly" in new TestSuite {
@@ -15,16 +16,27 @@ class InMemoryEvalDataStoreUnitTest extends FreeSpec with Matchers {
       result should contain(testAccount2)
     }
 
-    "GetAccount should return the correct account" in new TestSuite {
-      testDataStore.getAccount("4444").value shouldBe Right(testAccount4)
+    "GetAccount should" - {
+      "return the correct account" in new TestSuite {
+        testDataStore.getAccount("4444").value shouldBe Right(testAccount4)
+      }
+
+      "return AccountDoesNotExist when a non existing account is requested" in new TestSuite {
+        testDataStore.getAccount("SOME_DUMMY_ACCOUNT").value.toString shouldBe Left(AccountDoesNotExist).toString
+      }
     }
 
-    "UpdateAccount should update the correct account" in new TestSuite {
-      val expectedNumber = 4827.32
-      testDataStore.updateAccount(testAccount2.copy(balance = expectedNumber))
-      testDataStore.getAccount("2222").value shouldBe Right(
-        CurrencyAccount("2222", expectedNumber, Currency.GBP)
-      )
+    "UpdateAccount should" - {
+      "only update an existing account" in new TestSuite {
+        testDataStore.updateAccount(nonExistingAccount).value.toString shouldBe Left(FailedToUpdateAccount).toString
+      }
+      "update the correct account" in new TestSuite {
+        val expectedNumber = 4827.32
+        testDataStore.updateAccount(testAccount2.copy(balance = expectedNumber))
+        testDataStore.getAccount("2222").value shouldBe Right(
+          CurrencyAccount("2222", expectedNumber, Currency.GBP)
+        )
+      }
     }
 
   }
@@ -39,6 +51,9 @@ class InMemoryEvalDataStoreUnitTest extends FreeSpec with Matchers {
     val testAccount4 = CurrencyAccount("4444", 44.1, Currency.USD)
     val testAccount5 = CurrencyAccount("5555", 55.1, Currency.EUR)
     val testAccount6 = CurrencyAccount("6666", 66.1, Currency.USD)
+
+
+    val nonExistingAccount = CurrencyAccount("DUMMY_ACCOUNT", 1.1, Currency.EUR)
 
     val accounts = Vector(
       testAccount1,

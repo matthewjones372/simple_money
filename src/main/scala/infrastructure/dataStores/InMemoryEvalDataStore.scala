@@ -3,13 +3,11 @@ package infrastructure.dataStores
 import java.util.concurrent.ConcurrentHashMap
 
 import cats.Eval
-import cats.implicits._
 import model.CurrencyAccount
-import service.{ AccountGatewayAlg, TransferServiceErrors }
+import service.{AccountGatewayAlg, TransferServiceErrors}
 
 import scala.collection.JavaConverters._
 import scala.collection.concurrent
-import scala.util.Try
 
 class InMemoryEvalDataStore(accounts: Seq[CurrencyAccount]) extends AccountGatewayAlg[Eval] {
 
@@ -27,8 +25,10 @@ class InMemoryEvalDataStore(accounts: Seq[CurrencyAccount]) extends AccountGatew
 
   override def updateAccount(account: CurrencyAccount): Eval[Either[TransferServiceErrors, Unit]] =
     Eval.now {
-      Try(currencyAccounts.update(account.iban, account)).toEither
-        .leftMap(_ => FailedToUpdateAccount)
+      currencyAccounts.put(account.iban, account) match {
+        case Some(_) => Right(())
+        case None => Left(FailedToUpdateAccount)
+      }
     }
 
   private val currencyAccounts: concurrent.Map[String, CurrencyAccount] =

@@ -1,21 +1,12 @@
 package model
 
-sealed trait Currency {
-  def symbol: String
-}
+sealed trait Currency
 
 object Currency {
 
-  case object GBP extends Currency {
-    val symbol: String = "£"
-  }
+  case object GBP extends Currency
 
-  case object USD extends Currency {
-    val symbol: String = "$"
-  }
+  case object USD extends Currency
 
-  case object EUR extends Currency {
-    val symbol: String = "€"
-  }
-
+  case object EUR extends Currency
 }

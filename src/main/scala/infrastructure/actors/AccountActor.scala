@@ -12,11 +12,11 @@ import scala.concurrent.duration._
 
 class AccountActor(transferService: AccountTransferService[Eval]) extends Actor with ActorLogging {
 
-  implicit lazy val timeout = Timeout(5.seconds)
+  implicit lazy val timeout: Timeout = Timeout(5.seconds)
 
   lazy val formatter = new DecimalFormat("#.##")
 
-  override def receive: Receive = {
+  override def receive: PartialFunction[Any, Unit] = {
 
     case transferBetweenAccounts(fromIban, toIban, amount) =>
       val response: Eval[String] = transferService.accountTransfer(fromIban, toIban, amount) map {
