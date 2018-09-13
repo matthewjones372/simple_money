@@ -1,4 +1,4 @@
-package domain.algerbra
+package domain.algebra
 import domain.model.CurrencyAccount
 import service.TransferServiceErrors
 

@@ -3,7 +3,7 @@ package infrastructure.dataStores
 import java.util.concurrent.ConcurrentHashMap
 
 import cats.Eval
-import domain.algerbra.AccountGatewayAlg
+import domain.algebra.AccountGatewayAlg
 import domain.model.CurrencyAccount
 import service.TransferServiceErrors
 

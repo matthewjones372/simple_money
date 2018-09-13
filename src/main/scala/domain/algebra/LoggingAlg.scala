@@ -1,4 +1,4 @@
-package domain.algerbra
+package domain.algebra
 
 import scala.language.higherKinds
 

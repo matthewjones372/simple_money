@@ -4,13 +4,11 @@ Currency transfers between accounts within a business.
 
 ### Assumptions
 
-
-
 * Transfers are system to system, no authentication has been implemented.
 
-* All validation of account variables is done by some external API feeding the data store.
+* All validation of account variables is done by some external system feeding the service.
 
-* Transfers are only made between internal accounts, no need to contact a third party.
+* Transfers are only made between internal accounts, there is no need to contact a third party.
 
 * Transfers are only made between accounts with the same currency.
 
@@ -163,9 +161,12 @@ final case class CurrencyAccount(
 This allows for a different Monad effect to be implemented without changing the business logic. 
 
 * An example of a concrete TransferService has been implemented using the Cats Eval Monad, this was to demonstrate the
-classes usage with something other than a Future. 
+classes usage with something other than a Future.
 
-* Akka HTTP has been used to the REST interface. 
+* The design allows for a different gateway to be implemented in the future it just has to extend GatewayAlg 
+and implement the methods.
+
+* Akka HTTP has been used as the REST interface. 
 
 
 #### Nice to haves

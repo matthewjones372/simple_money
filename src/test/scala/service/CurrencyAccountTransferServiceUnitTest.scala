@@ -1,7 +1,7 @@
 package service
 
 import cats.implicits._
-import domain.algerbra.{AccountGatewayAlg, LoggingAlg}
+import domain.algebra.{AccountGatewayAlg, LoggingAlg}
 import domain.model.{Currency, CurrencyAccount}
 import org.scalatest.{FreeSpec, Matchers}
 

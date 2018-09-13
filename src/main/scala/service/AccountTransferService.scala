@@ -4,7 +4,7 @@ import java.text.DecimalFormat
 
 import cats.Monad
 import cats.data.EitherT
-import domain.algerbra.{AccountGatewayAlg, LoggingAlg}
+import domain.algebra.{AccountGatewayAlg, LoggingAlg}
 import domain.model.CurrencyAccount
 
 import scala.language.higherKinds

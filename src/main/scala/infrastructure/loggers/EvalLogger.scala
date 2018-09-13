@@ -2,7 +2,7 @@ package infrastructure.loggers
 
 import cats.Eval
 import com.typesafe.scalalogging.LazyLogging
-import domain.algerbra.LoggingAlg
+import domain.algebra.LoggingAlg
 class EvalLogger extends LoggingAlg[Eval] with LazyLogging {
 
   override def info(msg: String): Eval[Unit] = Eval.now { logger.info(msg) }
