@@ -13,7 +13,7 @@ import service.AccountTransferService
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
-object QuickStartDemoServer extends App with AccountRoutes{
+object QuickStartDemoServer extends App with AccountRoutes {
   implicit val system: ActorSystem =
     ActorSystem("currencyAccountServer")
 
@@ -23,6 +23,7 @@ object QuickStartDemoServer extends App with AccountRoutes{
   lazy val dataStore: InMemoryEvalDataStore =
     new InMemoryEvalDataStore
 
+
   lazy val logger: EvalLogger =
     new EvalLogger
 
@@ -30,7 +31,7 @@ object QuickStartDemoServer extends App with AccountRoutes{
     new AccountTransferService[Eval](dataStore, logger)
 
   val currencyAccountActor: ActorRef =
-    system.actorOf(AccountActor.props(transferService), "currentAccountProps")
+    system.actorOf(AccountActor.props(transferService), "CurrencyAccountActor")
 
   val routes: Route = accountRoutes
   val port: Int     = 8081 // TODO: Load in from config file

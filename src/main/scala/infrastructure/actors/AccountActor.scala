@@ -13,32 +13,33 @@ import scala.concurrent.duration._
 
 class AccountActor(transferService: AccountTransferService[Eval]) extends Actor with ActorLogging {
 
-  implicit lazy val timeout: Timeout = Timeout(5.seconds)
+  implicit lazy val timeout: Timeout = Timeout(5.seconds) // TODO: Load in from config file
 
   lazy val formatter = new DecimalFormat("#.##")
 
   override def receive: PartialFunction[Any, Unit] = {
 
 
-    case GetAccounts => sender() ! transferService.listAllAccounts.value
+    case GetAccounts =>
+      sender() ! transferService.listAllAccounts.value
 
-    case NewAccount(iban, balance, currency) =>
-      val response = transferService.addNewAccount(CurrencyAccount(iban, balance, currency)) map {
+    case PostNewAccount(accountNumber, balance, currency) =>
+      val response = transferService.addNewAccount(CurrencyAccount(accountNumber, balance, currency)) map {
         case Right(_) =>
-          s"Successfully added $iban into the Datastore"
+          s"Successfully added $accountNumber into the Datastore"
         case Left(err) =>
-          s"Could not add $iban into the data store reason: $err"
+          s"Could not add $accountNumber into the data store reason: $err"
       }
-      sender() ! ActionPerformed(response.value)
+      sender() ! HttpResponse(response.value)
 
-    case transferBetweenAccounts(fromIban, toIban, amount) =>
-      val response: Eval[String] = transferService.accountTransfer(fromIban, toIban, amount) map {
+    case transferBetweenAccounts(fromAccountNumber, toAccountNumber, amount) =>
+      val response: Eval[String] = transferService.accountTransfer(fromAccountNumber, toAccountNumber, amount) map {
         case Right(_) =>
-          s"${formatter.format(amount)} has been transferred from $fromIban to $toIban"
+          s"${formatter.format(amount)} has been transferred from $fromAccountNumber to $toAccountNumber"
         case Left(err) =>
-          s"Transfer unsuccessful from account $fromIban to $toIban error: ${err.toString}"
+          s"Transfer unsuccessful from account $fromAccountNumber to $toAccountNumber error: ${err.toString}"
       }
-      sender() ! ActionPerformed(response.value)
+      sender() ! HttpResponse(response.value)
 
 
   }
@@ -48,15 +49,15 @@ object AccountActor {
 
   final case object GetAccounts
 
-  final case class NewAccount(iban: String, balance: Double, currency: Currency)
+  final case class PostNewAccount(accountNumber: String, balance: Double, currency: Currency)
 
-  final case class ActionPerformed(response: String)
+  final case class HttpResponse(response: String)
 
-  final case class GetCurrencyAccount(iban: String)
+  final case class GetCurrencyAccount(accountNumber: String)
 
   final case class transferBetweenAccounts(
-      fromIban: String,
-      toIban: String,
+      fromAccountNumber: String,
+      toAccountNumber: String,
       amount: Double
   )
 

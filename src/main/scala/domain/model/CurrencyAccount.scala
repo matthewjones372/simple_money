@@ -1,7 +1,7 @@
 package domain.model
 
 final case class CurrencyAccount(
-    iban: String,
+    accountNumber: String,
     balance: Double,
     currency: Currency
 )

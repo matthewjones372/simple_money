@@ -7,7 +7,8 @@ import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import cats.Eval
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
-import infrastructure.actors.AccountActor.{ActionPerformed, NewAccount, transferBetweenAccounts}
+import infrastructure.actors.AccountActor.{
+  HttpResponse, PostNewAccount, transferBetweenAccounts}
 import infrastructure.actors.{AccountActor, AccountRoutes}
 import infrastructure.dataStores.InMemoryEvalDataStore
 import infrastructure.loggers.EvalLogger
@@ -68,7 +69,7 @@ class CurrencyAccountRoutesUnitTest
 
     "(POST :/api/accounts) should" - {
       "post a new account" in {
-        val newAccountPost = NewAccount("SOME_IBAN", 50.0, Currency.GBP)
+        val newAccountPost = PostNewAccount("SOME_IBAN", 50.0, Currency.GBP)
 
         val eventualEntity = Marshal(newAccountPost).to[MessageEntity]
 
@@ -95,7 +96,7 @@ class CurrencyAccountRoutesUnitTest
         request ~> routes ~> check {
           status shouldBe StatusCodes.OK
           contentType shouldBe ContentTypes.`application/json`
-          responseAs[ActionPerformed] shouldBe ActionPerformed(
+          responseAs[HttpResponse] shouldBe HttpResponse(
             "40 has been transferred from Account1 to Account2"
           )
         }
@@ -113,7 +114,7 @@ class CurrencyAccountRoutesUnitTest
         request ~> routes ~> check {
           status shouldBe StatusCodes.OK
           contentType shouldBe ContentTypes.`application/json`
-          responseAs[ActionPerformed].response.split(" ") should contain("AccountDoesNotExist")
+          responseAs[HttpResponse].response.split(" ") should contain("AccountDoesNotExist")
         }
 
       }

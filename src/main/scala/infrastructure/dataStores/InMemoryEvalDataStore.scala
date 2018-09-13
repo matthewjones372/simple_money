@@ -26,7 +26,7 @@ class InMemoryEvalDataStore extends AccountGatewayAlg[Eval] {
 
   override def updateAccount(account: CurrencyAccount): Eval[Either[TransferServiceErrors, Unit]] =
     Eval.now {
-      currencyAccounts.put(account.iban, account) match {
+      currencyAccounts.put(account.accountNumber, account) match {
         case Some(_) => Right(())
         case None    => Left(FailedToUpdateAccount)
       }
@@ -34,13 +34,12 @@ class InMemoryEvalDataStore extends AccountGatewayAlg[Eval] {
 
   override def postAccount(account: CurrencyAccount): Eval[Either[TransferServiceErrors, Unit]] =
     Eval.now {
-      currencyAccounts.get(account.iban) match {
+      currencyAccounts.get(account.accountNumber) match {
         case Some(_) => Left(AccountAlreadyExists)
-        case None    => Right(currencyAccounts.update(account.iban, account))
+        case None    => Right(currencyAccounts.update(account.accountNumber, account))
       }
     }
 
   private val currencyAccounts: concurrent.Map[String, CurrencyAccount] =
     new ConcurrentHashMap[String, CurrencyAccount]().asScala
-
 }

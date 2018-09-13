@@ -16,7 +16,7 @@ class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
       "return a seq of currency accounts" in new TestSuite {
         val results: Seq[CurrencyAccount] = transferService.listAllAccounts.get
         results.size shouldBe 4
-        results.filter(_.iban == accountWithPositiveFunds).head.iban shouldBe positiveAccount.iban
+        results.filter(_.accountNumber == accountWithPositiveFunds).head.accountNumber shouldBe positiveAccount.accountNumber
       }
 
       "transferBetweenAccounts should " - {
@@ -151,7 +151,7 @@ class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
           Success(accounts.get(iban).map(Right(_)).getOrElse(Left(AccountDoesNotExist)))
 
         override def updateAccount(account: CurrencyAccount): Try[Either[TransferServiceErrors, Unit]] =
-          Success(Right(accounts.update(account.iban, account)))
+          Success(Right(accounts.update(account.accountNumber, account)))
 
       override def postAccount(account: CurrencyAccount): Try[Either[TransferServiceErrors, Unit]] = ???
     }

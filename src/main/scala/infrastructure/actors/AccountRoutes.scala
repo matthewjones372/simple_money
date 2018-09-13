@@ -28,7 +28,7 @@ trait AccountRoutes extends FailFastCirceSupport with JsonCodecs {
     pathPrefix("api" / "accounts" / "transfer") {
       (pathEndOrSingleSlash & put) {
         entity(as[transferBetweenAccounts]) { transferRequest =>
-          complete((currencyAccountActor ? transferRequest).mapTo[ActionPerformed])
+          complete((currencyAccountActor ? transferRequest).mapTo[HttpResponse])
         }
       }
     } ~ pathPrefix("api" / "accounts") {
@@ -37,9 +37,9 @@ trait AccountRoutes extends FailFastCirceSupport with JsonCodecs {
           val accounts = (currencyAccountActor ? GetAccounts).mapTo[Seq[CurrencyAccount]]
           complete(accounts)
         } ~ post {
-          entity(as[NewAccount]) { newAccount =>
+          entity(as[PostNewAccount]) { newAccount =>
             val result = currencyAccountActor ? newAccount
-            complete(result.mapTo[ActionPerformed])
+            complete(result.mapTo[HttpResponse])
           }
         }
       }

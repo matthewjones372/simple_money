@@ -12,9 +12,9 @@ import scala.language.higherKinds
 class AccountTransferService[F[_]](
     gateway: AccountGatewayAlg[F],
     logger: LoggingAlg[F]
-)(implicit ME: Monad[F]) {
+)(implicit M: Monad[F]) {
 
-  import ME._
+  import M._
 
   def listAllAccounts: F[Seq[CurrencyAccount]] =
     gateway.getAllAccounts
@@ -22,17 +22,17 @@ class AccountTransferService[F[_]](
   def addNewAccount(account: CurrencyAccount): F[Either[TransferServiceErrors, Unit]] =
     gateway.postAccount(account)
 
-  def accountTransfer(fromIban: String,
-                      toIban: String,
+  def accountTransfer(fromAccountNumber: String,
+                      toAccountNumber: String,
                       transferAmount: Double): F[Either[TransferServiceErrors, Unit]] = {
 
     def lift[A](fa: F[A]): EitherT[F, TransferServiceErrors, A] =
       EitherT.liftF[F, TransferServiceErrors, A](fa)
 
     (for {
-      _           <- EitherT(pure(areDifferentAccounts(fromIban, toIban)))
-      fromAccount <- EitherT(gateway.getAccount(fromIban))
-      toAccount   <- EitherT(gateway.getAccount(toIban))
+      _           <- EitherT(pure(areDifferentAccounts(fromAccountNumber, toAccountNumber)))
+      fromAccount <- EitherT(gateway.getAccount(fromAccountNumber))
+      toAccount   <- EitherT(gateway.getAccount(toAccountNumber))
 
       _ <- EitherT(pure(haveSameCurrency(fromAccount, toAccount)))
       _ <- EitherT(pure(hasSufficientBalance(fromAccount, transferAmount)))
@@ -56,7 +56,7 @@ class AccountTransferService[F[_]](
 
   private def updatedLogMessage(before: CurrencyAccount, after: CurrencyAccount) = {
     val formatter = new DecimalFormat("#.##")
-    s"Updated Account: ${before.iban}: Balance updated from ${formatter.format(before.balance)} " +
+    s"Updated Account: ${before.accountNumber}: Balance updated from ${formatter.format(before.balance)} " +
     s"${before.currency.toString} to ${formatter.format(after.balance)} ${after.currency.toString}"
   }
 
@@ -76,9 +76,9 @@ class AccountTransferService[F[_]](
       Left(gateway.CannotTransferToAccountWithDifferentCurrency)
     }
 
-  private def areDifferentAccounts(fromIban: String,
-                                   toIban: String): Either[TransferServiceErrors, Unit] =
-    if (!fromIban.equals(toIban)) {
+  private def areDifferentAccounts(fromAccountNumber: String,
+                                   toAccountNumber: String): Either[TransferServiceErrors, Unit] =
+    if (!fromAccountNumber.equals(toAccountNumber)) {
       Right(())
     } else {
       Left(gateway.CannotTransferToSameAccount)

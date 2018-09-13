@@ -1,6 +1,7 @@
 package infrastructure.actors
 
-import infrastructure.actors.AccountActor.{ActionPerformed, NewAccount, transferBetweenAccounts}
+import infrastructure.actors.AccountActor.{
+  HttpResponse, PostNewAccount, transferBetweenAccounts}
 import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.semiauto.{deriveDecoder, deriveEncoder}
 import io.circe.{Decoder, Encoder}
@@ -20,14 +21,14 @@ trait JsonCodecs {
   implicit val transferBetweenAccountsDecoder: Decoder[transferBetweenAccounts] =
     deriveDecoder[transferBetweenAccounts]
 
-  implicit val newAccountEncoder: Encoder[NewAccount] =
-    deriveEncoder[NewAccount]
+  implicit val newAccountEncoder: Encoder[PostNewAccount] =
+    deriveEncoder[PostNewAccount]
 
-  implicit val newAccountDecoder: Decoder[NewAccount] =
-    deriveDecoder[NewAccount]
+  implicit val newAccountDecoder: Decoder[PostNewAccount] =
+    deriveDecoder[PostNewAccount]
 
-  implicit val actionPerformedEncoder: Encoder[ActionPerformed] =
-    deriveEncoder[ActionPerformed]
-  implicit val actionPerformedDecoder: Decoder[ActionPerformed] =
-    deriveDecoder[ActionPerformed]
+  implicit val actionPerformedEncoder: Encoder[HttpResponse] =
+    deriveEncoder[HttpResponse]
+  implicit val actionPerformedDecoder: Decoder[HttpResponse] =
+    deriveDecoder[HttpResponse]
 }
