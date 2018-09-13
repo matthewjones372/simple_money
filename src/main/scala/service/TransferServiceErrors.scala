@@ -6,6 +6,8 @@ trait TransferServiceErrors {
 
   case object AccountHasInsufficientFunds extends TransferServiceErrors
 
+  case object AccountAlreadyExists extends TransferServiceErrors
+
   case object FailedToUpdateAccount extends TransferServiceErrors
 
   case object CannotTransferToSameAccount extends TransferServiceErrors

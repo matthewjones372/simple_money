@@ -1,4 +1,4 @@
-package model
+package domain.model
 
 sealed trait Currency
 

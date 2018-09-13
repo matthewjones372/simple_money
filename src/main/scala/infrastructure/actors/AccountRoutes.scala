@@ -9,8 +9,8 @@ import akka.http.scaladsl.server.directives.RouteDirectives.complete
 import akka.pattern.ask
 import akka.util.Timeout
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
+import domain.model.CurrencyAccount
 import infrastructure.actors.AccountActor._
-import model.CurrencyAccount
 
 import scala.concurrent.duration._
 
@@ -32,10 +32,16 @@ trait AccountRoutes extends FailFastCirceSupport with JsonCodecs {
         }
       }
     } ~ pathPrefix("api" / "accounts") {
-      (pathEndOrSingleSlash & get) {
-        val accounts =
-          (currencyAccountActor ? getAccounts).mapTo[Seq[CurrencyAccount]]
-        complete(accounts)
+      pathEndOrSingleSlash {
+        get {
+          val accounts = (currencyAccountActor ? GetAccounts).mapTo[Seq[CurrencyAccount]]
+          complete(accounts)
+        } ~ post {
+          entity(as[NewAccount]) { newAccount =>
+            val result = currencyAccountActor ? newAccount
+            complete(result.mapTo[ActionPerformed])
+          }
+        }
       }
     }
   }

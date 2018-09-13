@@ -1,4 +1,4 @@
-package model
+package domain.model
 
 final case class CurrencyAccount(
     iban: String,

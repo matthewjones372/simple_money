@@ -1,7 +1,8 @@
 package service
 
 import cats.implicits._
-import model.{Currency, CurrencyAccount}
+import domain.algerbra.{AccountGatewayAlg, LoggingAlg}
+import domain.model.{Currency, CurrencyAccount}
 import org.scalatest.{FreeSpec, Matchers}
 
 import scala.collection.mutable
@@ -31,8 +32,8 @@ class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
           updatedAccount1.balance shouldBe 95.0
           updatedAccount2.balance shouldBe 205.0
 
-          log.exists(f => f.contains("£100 to £95"))
-          log.exists(f => f.contains("£200 to £205"))
+          logAudit.exists(f => f.contains("100 GBP to 95 GBP")) shouldBe true
+          logAudit.exists(f => f.contains("200 GBP to 205 GBP")) shouldBe true
         }
 
         "allow multiple payments" in new TestSuite {
@@ -54,15 +55,16 @@ class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
           updatedAccount1.balance shouldBe 50
           updatedAccount2.balance shouldBe 250
 
-          log.exists(f => f.contains("£100 to £90"))
-          log.exists(f => f.contains("£80 to £70"))
+          logAudit.exists(f => f.contains("100 GBP to 90 GBP")) shouldBe true
+          logAudit.exists(f => f.contains("80 GBP to 70 GBP")) shouldBe true
         }
 
         "not transfer funds when an account does not exist" in new TestSuite {
           val nonExistingAccount = "SOME_NON_EXISTING_ACCOUNT"
           val gatewayError: TransferServiceErrors =
             transferService.accountTransfer(nonExistingAccount, accountWithGBP, 2).get.left.get
-          gatewayError.toString shouldBe AccountDoesNotExist.toString
+
+          gatewayError === AccountDoesNotExist
         }
 
         "transferBetweenAccounts should not transfer funds when there is no account to transfer to" in new TestSuite {
@@ -73,7 +75,7 @@ class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
               .get
               .left
               .get
-          gatewayError.toString shouldBe AccountDoesNotExist.toString
+          gatewayError === AccountDoesNotExist
           gateway.getAccount(accountWithPositiveFunds).get.right.get.balance shouldBe 100.0
         }
 
@@ -84,7 +86,7 @@ class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
 
           gateway.getAccount(accountWithNegativeFunds).get.right.get.balance shouldBe -19.99
           gateway.getAccount(accountWithPositiveFunds).get.right.get.balance shouldBe 100
-          result.left.get.toString shouldBe AccountHasInsufficientFunds.toString
+          result.left.get === AccountHasInsufficientFunds
         }
 
         "not be able to transfer between the same account" in new TestSuite {
@@ -92,7 +94,7 @@ class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
             .accountTransfer(accountWithPositiveFunds, accountWithPositiveFunds, 30)
             .get
 
-          result.left.get.toString shouldBe CannotTransferToSameAccount.toString
+          result.left.get === CannotTransferToSameAccount
           gateway.getAccount(accountWithPositiveFunds).get.right.get.balance shouldBe 100
         }
 
@@ -100,7 +102,7 @@ class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
           val result: Either[TransferServiceErrors, Unit] =
             transferService.accountTransfer(accountWithGBP, accountWithEur, 30).get
 
-          result.left.get.toString shouldBe CannotTransferToAccountWithDifferentCurrency.toString
+          result.left.get === CannotTransferToAccountWithDifferentCurrency
         }
       }
     }
@@ -108,14 +110,14 @@ class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
 
   private class TestSuite() extends TransferServiceErrors {
 
-    val log: ArrayBuffer[String] = ArrayBuffer.empty[String]
+    val logAudit: ArrayBuffer[String] = ArrayBuffer.empty[String]
 
     class testLogger extends LoggingAlg[Try] {
-      override def info(msg: String): Try[Unit] = Success(log.append(msg))
+      override def info(msg: String): Try[Unit] = Success(logAudit.append(msg))
 
-      override def warn(msg: String): Try[Unit] = Success(log.append(msg))
+      override def warn(msg: String): Try[Unit] = Success(logAudit.append(msg))
 
-      override def error(msg: String, ex: Throwable): Try[Unit] = Success(log.append(s"$msg: $ex"))
+      override def error(msg: String, ex: Throwable): Try[Unit] = Success(logAudit.append(s"$msg: $ex"))
     }
 
     lazy val gateway: AccountGatewayAlg[Try] = testGateway(accounts)
@@ -142,8 +144,7 @@ class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
       accountWithNegativeFunds -> negativeAccount
     )
 
-    def testGateway(accounts: mutable.Map[String, CurrencyAccount]): AccountGatewayAlg[Try] =
-      new AccountGatewayAlg[Try] {
+    def testGateway(accounts: mutable.Map[String, CurrencyAccount]): AccountGatewayAlg[Try] = new AccountGatewayAlg[Try] {
         override def getAllAccounts: Try[Seq[CurrencyAccount]] = Success(accounts.values.toVector)
 
         override def getAccount(iban: String): Try[Either[TransferServiceErrors, CurrencyAccount]] =
@@ -151,7 +152,9 @@ class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
 
         override def updateAccount(account: CurrencyAccount): Try[Either[TransferServiceErrors, Unit]] =
           Success(Right(accounts.update(account.iban, account)))
-      }
+
+      override def postAccount(account: CurrencyAccount): Try[Either[TransferServiceErrors, Unit]] = ???
+    }
   }
 
 }

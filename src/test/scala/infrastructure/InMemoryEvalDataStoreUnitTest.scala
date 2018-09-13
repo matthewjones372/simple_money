@@ -1,7 +1,7 @@
 package infrastructure
 
 import infrastructure.dataStores.InMemoryEvalDataStore
-import model.{Currency, CurrencyAccount}
+import domain.model.{Currency, CurrencyAccount}
 import org.scalatest.{FreeSpec, Matchers}
 import service.TransferServiceErrors
 
@@ -28,7 +28,7 @@ class InMemoryEvalDataStoreUnitTest extends FreeSpec with Matchers with  Transfe
 
     "UpdateAccount should" - {
       "only update an existing account" in new TestSuite {
-        testDataStore.updateAccount(nonExistingAccount).value.toString shouldBe Left(FailedToUpdateAccount).toString
+        testDataStore.updateAccount(nonExistingAccount).value == Left(FailedToUpdateAccount)
       }
       "update the correct account" in new TestSuite {
         val expectedNumber = 4827.32
@@ -39,11 +39,24 @@ class InMemoryEvalDataStoreUnitTest extends FreeSpec with Matchers with  Transfe
       }
     }
 
+    "PostAccount should" - {
+      "post a new account into the Datastore" in new TestSuite {
+        testDataStore.postAccount(someAccount).value shouldBe Right()
+      }
+      "not post an account that already exists" in new TestSuite {
+        testDataStore.postAccount(someAccount) //Account is posted into Datastore
+        testDataStore.postAccount(someAccount).value == Left(AccountAlreadyExists)
+      }
+    }
+
   }
 
   // Test that it returns failure
 
   private class TestSuite {
+
+    val testDataStore: InMemoryEvalDataStore =
+      new InMemoryEvalDataStore
 
     val testAccount1 = CurrencyAccount("1111", 10.1, Currency.GBP)
     val testAccount2 = CurrencyAccount("2222", 22.1, Currency.GBP)
@@ -52,6 +65,8 @@ class InMemoryEvalDataStoreUnitTest extends FreeSpec with Matchers with  Transfe
     val testAccount5 = CurrencyAccount("5555", 55.1, Currency.EUR)
     val testAccount6 = CurrencyAccount("6666", 66.1, Currency.USD)
 
+
+    val someAccount = CurrencyAccount("SOME_IBAN", 192, Currency.EUR)
 
     val nonExistingAccount = CurrencyAccount("DUMMY_ACCOUNT", 1.1, Currency.EUR)
 
@@ -64,7 +79,9 @@ class InMemoryEvalDataStoreUnitTest extends FreeSpec with Matchers with  Transfe
       testAccount6
     )
 
-    val testDataStore: InMemoryEvalDataStore = new InMemoryEvalDataStore(accounts)
+
+    // Place test accounts into datastore
+    accounts.foreach(testDataStore.postAccount)
   }
 
 }

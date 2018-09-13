@@ -20,7 +20,6 @@ lazy val root = (project in file(".")).settings(
     "io.circe"                   %% "circe-parser"          % circieVersion,
     "io.circe"                   %% "circe-generic-extras"  % circieVersion,
     "org.typelevel"              %% "cats-core"             % catsVersion,
-    "com.danielasfregola"        %% "random-data-generator" % "2.4",
     "ch.qos.logback"             % "logback-classic"        % "1.2.3",
     "com.typesafe.scala-logging" %% "scala-logging"         % "3.9.0",
     "com.typesafe.akka"          %% "akka-http-testkit"     % akkaHttpVersion % Test,

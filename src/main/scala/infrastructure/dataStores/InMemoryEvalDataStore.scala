@@ -3,13 +3,14 @@ package infrastructure.dataStores
 import java.util.concurrent.ConcurrentHashMap
 
 import cats.Eval
-import model.CurrencyAccount
-import service.{AccountGatewayAlg, TransferServiceErrors}
+import domain.algerbra.AccountGatewayAlg
+import domain.model.CurrencyAccount
+import service.TransferServiceErrors
 
 import scala.collection.JavaConverters._
 import scala.collection.concurrent
 
-class InMemoryEvalDataStore(accounts: Seq[CurrencyAccount]) extends AccountGatewayAlg[Eval] {
+class InMemoryEvalDataStore extends AccountGatewayAlg[Eval] {
 
   override def getAllAccounts: Eval[Seq[CurrencyAccount]] = Eval.now {
     currencyAccounts.values.toVector
@@ -27,15 +28,19 @@ class InMemoryEvalDataStore(accounts: Seq[CurrencyAccount]) extends AccountGatew
     Eval.now {
       currencyAccounts.put(account.iban, account) match {
         case Some(_) => Right(())
-        case None => Left(FailedToUpdateAccount)
+        case None    => Left(FailedToUpdateAccount)
+      }
+    }
+
+  override def postAccount(account: CurrencyAccount): Eval[Either[TransferServiceErrors, Unit]] =
+    Eval.now {
+      currencyAccounts.get(account.iban) match {
+        case Some(_) => Left(AccountAlreadyExists)
+        case None    => Right(currencyAccounts.update(account.iban, account))
       }
     }
 
   private val currencyAccounts: concurrent.Map[String, CurrencyAccount] =
     new ConcurrentHashMap[String, CurrencyAccount]().asScala
 
-  // Add accounts to Map
-  accounts.foreach { account =>
-    currencyAccounts.update(account.iban, account)
-  }
 }

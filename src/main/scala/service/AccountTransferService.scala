@@ -4,7 +4,8 @@ import java.text.DecimalFormat
 
 import cats.Monad
 import cats.data.EitherT
-import model.CurrencyAccount
+import domain.algerbra.{AccountGatewayAlg, LoggingAlg}
+import domain.model.CurrencyAccount
 
 import scala.language.higherKinds
 
@@ -17,6 +18,9 @@ class AccountTransferService[F[_]](
 
   def listAllAccounts: F[Seq[CurrencyAccount]] =
     gateway.getAllAccounts
+
+  def addNewAccount(account: CurrencyAccount): F[Either[TransferServiceErrors, Unit]] =
+    gateway.postAccount(account)
 
   def accountTransfer(fromIban: String,
                       toIban: String,

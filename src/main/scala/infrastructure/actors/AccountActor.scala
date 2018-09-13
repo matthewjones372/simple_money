@@ -2,10 +2,11 @@ package infrastructure.actors
 
 import java.text.DecimalFormat
 
-import akka.actor.{ Actor, ActorLogging, Props }
+import akka.actor.{Actor, ActorLogging, Props}
 import akka.util.Timeout
 import cats.Eval
-import infrastructure.actors.AccountActor.{ ActionPerformed, transferBetweenAccounts }
+import domain.model.{Currency, CurrencyAccount}
+import infrastructure.actors.AccountActor._
 import service.AccountTransferService
 
 import scala.concurrent.duration._
@@ -18,6 +19,18 @@ class AccountActor(transferService: AccountTransferService[Eval]) extends Actor 
 
   override def receive: PartialFunction[Any, Unit] = {
 
+
+    case GetAccounts => sender() ! transferService.listAllAccounts.value
+
+    case NewAccount(iban, balance, currency) =>
+      val response = transferService.addNewAccount(CurrencyAccount(iban, balance, currency)) map {
+        case Right(_) =>
+          s"Successfully added $iban into the Datastore"
+        case Left(err) =>
+          s"Could not add $iban into the data store reason: $err"
+      }
+      sender() ! ActionPerformed(response.value)
+
     case transferBetweenAccounts(fromIban, toIban, amount) =>
       val response: Eval[String] = transferService.accountTransfer(fromIban, toIban, amount) map {
         case Right(_) =>
@@ -26,18 +39,20 @@ class AccountActor(transferService: AccountTransferService[Eval]) extends Actor 
           s"Transfer unsuccessful from account $fromIban to $toIban error: ${err.toString}"
       }
       sender() ! ActionPerformed(response.value)
-    case getAccounts =>
-      sender() ! transferService.listAllAccounts.value
+
+
   }
 }
 
 object AccountActor {
 
-  final case object getAccounts
+  final case object GetAccounts
+
+  final case class NewAccount(iban: String, balance: Double, currency: Currency)
 
   final case class ActionPerformed(response: String)
 
-  final case class getCurrencyAccount(iban: String)
+  final case class GetCurrencyAccount(iban: String)
 
   final case class transferBetweenAccounts(
       fromIban: String,

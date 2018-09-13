@@ -2,18 +2,18 @@ package infrastructure
 
 import akka.actor.ActorRef
 import akka.http.scaladsl.marshalling.Marshal
-import akka.http.scaladsl.model.{ ContentTypes, HttpRequest, MessageEntity, StatusCodes }
+import akka.http.scaladsl.model.{ContentTypes, HttpRequest, MessageEntity, StatusCodes}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import cats.Eval
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
-import infrastructure.actors.AccountActor.{ ActionPerformed, transferBetweenAccounts }
-import infrastructure.actors.{ AccountActor, AccountRoutes }
+import infrastructure.actors.AccountActor.{ActionPerformed, NewAccount, transferBetweenAccounts}
+import infrastructure.actors.{AccountActor, AccountRoutes}
 import infrastructure.dataStores.InMemoryEvalDataStore
 import infrastructure.loggers.EvalLogger
-import model.{ Currency, CurrencyAccount }
+import domain.model.{Currency, CurrencyAccount}
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{ FreeSpec, Matchers }
+import org.scalatest.{FreeSpec, Matchers}
 import service.AccountTransferService
 
 class CurrencyAccountRoutesUnitTest
@@ -33,7 +33,9 @@ class CurrencyAccountRoutesUnitTest
   )
 
   val dataStore: InMemoryEvalDataStore =
-    new InMemoryEvalDataStore(accounts)
+    new InMemoryEvalDataStore
+
+  accounts.foreach(dataStore.postAccount)
 
   val logger: EvalLogger = new EvalLogger
 
@@ -48,7 +50,7 @@ class CurrencyAccountRoutesUnitTest
   "CurrencyAccountRoutes" - {
     "(GET :/api/accounts) should" - {
       "return all accounts" in {
-        val request = HttpRequest(uri = "/api/accounts/")
+        val request = HttpRequest(uri = "/api/accounts")
 
         request ~> routes ~> check {
           status shouldBe StatusCodes.OK
@@ -60,6 +62,22 @@ class CurrencyAccountRoutesUnitTest
           responseAs[Seq[CurrencyAccount]] should contain(
             CurrencyAccount("Account5", 250.0, Currency.GBP)
           )
+        }
+      }
+    }
+
+    "(POST :/api/accounts) should" - {
+      "post a new account" in {
+        val newAccountPost = NewAccount("SOME_IBAN", 50.0, Currency.GBP)
+
+        val eventualEntity = Marshal(newAccountPost).to[MessageEntity]
+
+        val newAccountEntity = eventualEntity.futureValue
+
+        val request = Post("/api/accounts/").withEntity(newAccountEntity)
+
+        request ~> routes ~> check {
+          status shouldBe StatusCodes.OK
         }
       }
     }
