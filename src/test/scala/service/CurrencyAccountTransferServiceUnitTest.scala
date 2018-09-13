@@ -10,9 +10,9 @@ import scala.util.{Success, Try}
 
 class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
 
-  "TransferService with" - {
-    "a successful gateway should " - {
-      "listAllAccounts" in new TestSuite {
+  "TransferService with a successful gateway" - {
+    "listAllAccount should" - {
+      "return a seq of currency accounts" in new TestSuite {
         val results: Seq[CurrencyAccount] = transferService.listAllAccounts.get
         results.size shouldBe 4
         results.filter(_.iban == accountWithPositiveFunds).head.iban shouldBe positiveAccount.iban

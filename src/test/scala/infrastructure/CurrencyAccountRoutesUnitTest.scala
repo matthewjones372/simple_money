@@ -2,22 +2,22 @@ package infrastructure
 
 import akka.actor.ActorRef
 import akka.http.scaladsl.marshalling.Marshal
-import akka.http.scaladsl.model.{ContentTypes, HttpRequest, MessageEntity, StatusCodes}
+import akka.http.scaladsl.model.{ ContentTypes, HttpRequest, MessageEntity, StatusCodes }
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import cats.Eval
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
-import infrastructure.actors.AccountActor.{ActionPerformed, transferBetweenAccounts}
-import infrastructure.actors.{AccountActor, AccountRoutes}
+import infrastructure.actors.AccountActor.{ ActionPerformed, transferBetweenAccounts }
+import infrastructure.actors.{ AccountActor, AccountRoutes }
 import infrastructure.dataStores.InMemoryEvalDataStore
 import infrastructure.loggers.EvalLogger
-import model.{Currency, CurrencyAccount}
+import model.{ Currency, CurrencyAccount }
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{FreeSpec, Matchers}
+import org.scalatest.{ FreeSpec, Matchers }
 import service.AccountTransferService
 
 class CurrencyAccountRoutesUnitTest
-  extends FreeSpec
+    extends FreeSpec
     with Matchers
     with ScalaFutures
     with ScalatestRouteTest
@@ -46,24 +46,26 @@ class CurrencyAccountRoutesUnitTest
   lazy val routes: Route = accountRoutes
 
   "CurrencyAccountRoutes" - {
-    "Should return all accounts (GET :/api/accounts)" in {
-      val request = HttpRequest(uri = "/api/accounts/")
+    "(GET :/api/accounts) should" - {
+      "return all accounts" in {
+        val request = HttpRequest(uri = "/api/accounts/")
 
-      request ~> routes ~> check {
-        status shouldBe StatusCodes.OK
-        contentType shouldBe ContentTypes.`application/json`
+        request ~> routes ~> check {
+          status shouldBe StatusCodes.OK
+          contentType shouldBe ContentTypes.`application/json`
 
-        responseAs[Seq[CurrencyAccount]] should contain(
-          CurrencyAccount("Account1", 100.0, Currency.GBP)
-        )
-        responseAs[Seq[CurrencyAccount]] should contain(
-          CurrencyAccount("Account5", 250.0, Currency.GBP)
-        )
+          responseAs[Seq[CurrencyAccount]] should contain(
+            CurrencyAccount("Account1", 100.0, Currency.GBP)
+          )
+          responseAs[Seq[CurrencyAccount]] should contain(
+            CurrencyAccount("Account5", 250.0, Currency.GBP)
+          )
+        }
       }
     }
 
-    "(PUT :/accounts/transfer should" - {
-      "return transfer between two accounts" in {
+    "(PUT :/accounts/transfer) should" - {
+      "transfer between two accounts" in {
         val transferRequest = transferBetweenAccounts("Account1", "Account2", 40)
 
         val eventualEntity = Marshal(transferRequest).to[MessageEntity]
@@ -81,22 +83,22 @@ class CurrencyAccountRoutesUnitTest
         }
 
       }
-    }
-    "return an error when attempting to transfer from a non-existing account" in {
-      val transferRequest = transferBetweenAccounts("NON_EXISTING", "Account2", 40)
+      "return an error when attempting to transfer from a non-existing account" in {
+        val transferRequest = transferBetweenAccounts("NON_EXISTING", "Account2", 40)
 
-      val eventualEntity = Marshal(transferRequest).to[MessageEntity]
+        val eventualEntity = Marshal(transferRequest).to[MessageEntity]
 
-      val transferEntity = eventualEntity.futureValue
+        val transferEntity = eventualEntity.futureValue
 
-      val request = Put("/api/accounts/transfer").withEntity(transferEntity)
+        val request = Put("/api/accounts/transfer").withEntity(transferEntity)
 
-      request ~> routes ~> check {
-        status shouldBe StatusCodes.OK
-        contentType shouldBe ContentTypes.`application/json`
-        responseAs[ActionPerformed].response.split(" ") should contain("AccountDoesNotExist")
+        request ~> routes ~> check {
+          status shouldBe StatusCodes.OK
+          contentType shouldBe ContentTypes.`application/json`
+          responseAs[ActionPerformed].response.split(" ") should contain("AccountDoesNotExist")
+        }
+
       }
-
     }
   }
 

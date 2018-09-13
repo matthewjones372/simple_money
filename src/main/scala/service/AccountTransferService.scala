@@ -53,7 +53,7 @@ class AccountTransferService[F[_]](
   private def updatedLogMessage(before: CurrencyAccount, after: CurrencyAccount) = {
     val formatter = new DecimalFormat("#.##")
     s"Updated Account: ${before.iban}: Balance updated from ${formatter.format(before.balance)} " +
-    s"to ${formatter.format(after.balance)}"
+    s"${before.currency.toString} to ${formatter.format(after.balance)} ${after.currency.toString}"
   }
 
   private def hasSufficientBalance(account: CurrencyAccount,

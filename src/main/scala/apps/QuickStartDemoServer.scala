@@ -8,7 +8,7 @@ import org.scalacheck.{Arbitrary, Gen}
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
-object QuickStartServer extends App  with RandomDataGenerator {
+object QuickStartDemoServer extends App  with RandomDataGenerator {
 
   def accountGenerator(n: Int): Seq[CurrencyAccount] = {
     implicit val arb: Arbitrary[String] = Arbitrary(Gen.alphaStr)
@@ -23,14 +23,12 @@ object QuickStartServer extends App  with RandomDataGenerator {
     CurrencyAccount("Account5", 250, Currency.GBP),
   )
 
-  val app = new AppLoader(accounts ++ accountGenerator(5000))
+  val app =
+    new AppLoader(accounts ++ accountGenerator(5000))
+
   import app._
 
-
-
   Http().bindAndHandle(routes, host, port)
-
   logger.info(s"Server online at http://$host:$port/")
-
   Await.result(system.whenTerminated, Duration.Inf)
 }
