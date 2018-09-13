@@ -26,6 +26,8 @@ lazy val root = (project in file(".")).settings(
     "org.scalatest"              %% "scalatest"             % scalaTestVersion % Test
   )
 )
+scalacOptions += "-deprecation"
+
 
 resolvers ++= Seq(
   Resolver.bintrayRepo("hseeberger", "maven"),

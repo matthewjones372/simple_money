@@ -41,7 +41,7 @@ class InMemoryEvalDataStoreUnitTest extends FreeSpec with Matchers with  Transfe
 
     "PostAccount should" - {
       "post a new account into the Datastore" in new TestSuite {
-        testDataStore.postAccount(someAccount).value shouldBe Right()
+        testDataStore.postAccount(someAccount) === Right(Unit)
       }
       "not post an account that already exists" in new TestSuite {
         testDataStore.postAccount(someAccount) //Account is posted into Datastore
@@ -78,7 +78,6 @@ class InMemoryEvalDataStoreUnitTest extends FreeSpec with Matchers with  Transfe
       testAccount5,
       testAccount6
     )
-
 
     // Place test accounts into datastore
     accounts.foreach(testDataStore.postAccount)

@@ -170,8 +170,8 @@ and implement the methods.
 
 
 #### Nice to haves
-* An account lineage attached to the account, would show what transfer occurred at which time.
-* Transfer between different currency types, could be achieved from an external service such as a micro-service.
+* An account lineage attached to the account, would show what transfer occurred at what time.
+* Transfer between different currency types, could be achieved from an external service.
 
 ### Authors
 * **Matthew Jones**

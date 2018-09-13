@@ -34,9 +34,10 @@ class InMemoryEvalDataStore extends AccountGatewayAlg[Eval] {
 
   override def postAccount(account: CurrencyAccount): Eval[Either[TransferServiceErrors, Unit]] =
     Eval.now {
-      currencyAccounts.get(account.accountNumber) match {
-        case Some(_) => Left(AccountAlreadyExists)
-        case None    => Right(currencyAccounts.update(account.accountNumber, account))
+      if (currencyAccounts.isDefinedAt(account.accountNumber)) {
+        Left(AccountAlreadyExists)
+      } else {
+        Right(currencyAccounts.update(account.accountNumber, account))
       }
     }
 
