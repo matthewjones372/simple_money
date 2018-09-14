@@ -1,13 +1,13 @@
 package service
 
 import cats.implicits._
-import domain.algebra.{AccountGatewayAlg, LoggingAlg}
-import domain.model.{Currency, CurrencyAccount}
-import org.scalatest.{FreeSpec, Matchers}
+import domain.algebra.{ AccountGatewayAlg, LoggingAlg }
+import domain.model.{ Currency, CurrencyAccount }
+import org.scalatest.{ FreeSpec, Matchers }
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.util.{Success, Try}
+import scala.util.{ Success, Try }
 
 class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
 
@@ -16,7 +16,10 @@ class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
       "return a seq of currency accounts" in new TestSuite {
         val results: Seq[CurrencyAccount] = transferService.listAllAccounts.get
         results.size shouldBe 4
-        results.filter(_.accountNumber == accountWithPositiveFunds).head.accountNumber shouldBe positiveAccount.accountNumber
+        results
+          .filter(_.accountNumber == accountWithPositiveFunds)
+          .head
+          .accountNumber shouldBe positiveAccount.accountNumber
       }
 
       "transferBetweenAccounts should " - {
@@ -113,25 +116,30 @@ class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
     val logAudit: ArrayBuffer[String] = ArrayBuffer.empty[String]
 
     class testLogger extends LoggingAlg[Try] {
-      override def info(msg: String): Try[Unit] = Success(logAudit.append(msg))
+      override def info(msg: String): Try[Unit] =
+        Success(logAudit.append(msg))
 
-      override def warn(msg: String): Try[Unit] = Success(logAudit.append(msg))
+      override def warn(msg: String): Try[Unit] =
+        Success(logAudit.append(msg))
 
-      override def error(msg: String, ex: Throwable): Try[Unit] = Success(logAudit.append(s"$msg: $ex"))
+      override def error(msg: String, ex: Throwable): Try[Unit] =
+        Success(logAudit.append(s"$msg: $ex"))
     }
 
     lazy val gateway: AccountGatewayAlg[Try] = testGateway(accounts)
 
-    lazy val transferService = new AccountTransferService[Try](gateway, new testLogger)
+    lazy val transferService =
+      new AccountTransferService[Try](gateway, new testLogger)
 
     val accountWithPositiveFunds = "ACCOUNT_WITH_POSITIVE"
-    val positiveAccount = CurrencyAccount(accountWithPositiveFunds, 100, Currency.GBP)
+    val positiveAccount =
+      CurrencyAccount(accountWithPositiveFunds, 100, Currency.GBP)
 
     val accountWithGBP = "ACCOUNT_WITH_GBP"
-    val GBPAccount = CurrencyAccount(accountWithGBP, 200, Currency.GBP)
+    val GBPAccount     = CurrencyAccount(accountWithGBP, 200, Currency.GBP)
 
     val accountWithEur = "ACCOUNT_WITH_EUR"
-    val EURAccount = CurrencyAccount(accountWithEur, 503.4, Currency.EUR)
+    val EURAccount     = CurrencyAccount(accountWithEur, 503.4, Currency.EUR)
 
     val accountWithNegativeFunds = "ACCOUNT_WITH_NEGATIVE_FUNDS"
     val negativeAccount =
@@ -139,22 +147,25 @@ class CurrencyAccountTransferServiceUnitTest extends FreeSpec with Matchers {
 
     val accounts = mutable.Map(
       accountWithPositiveFunds -> positiveAccount,
-      accountWithGBP -> GBPAccount,
-      accountWithEur -> EURAccount,
+      accountWithGBP           -> GBPAccount,
+      accountWithEur           -> EURAccount,
       accountWithNegativeFunds -> negativeAccount
     )
 
-    def testGateway(accounts: mutable.Map[String, CurrencyAccount]): AccountGatewayAlg[Try] = new AccountGatewayAlg[Try] {
-        override def getAllAccounts: Try[Seq[CurrencyAccount]] = Success(accounts.values.toVector)
+    def testGateway(accounts: mutable.Map[String, CurrencyAccount]): AccountGatewayAlg[Try] =
+      new AccountGatewayAlg[Try] {
+        override def getAllAccounts: Try[Seq[CurrencyAccount]] =
+          Success(accounts.values.toVector)
 
-        override def getAccount(iban: String): Try[Either[TransferServiceErrors, CurrencyAccount]] =
-          Success(accounts.get(iban).map(Right(_)).getOrElse(Left(AccountDoesNotExist)))
+        override def getAccount(accountNumber: String): Try[Either[TransferServiceErrors, CurrencyAccount]] =
+          Success(accounts.get(accountNumber).map(Right(_)).getOrElse(Left(AccountDoesNotExist)))
 
         override def updateAccount(account: CurrencyAccount): Try[Either[TransferServiceErrors, Unit]] =
           Success(Right(accounts.update(account.accountNumber, account)))
 
-      override def postAccount(account: CurrencyAccount): Try[Either[TransferServiceErrors, Unit]] = ???
-    }
+        override def postAccount(account: CurrencyAccount): Try[Either[TransferServiceErrors, Unit]] =
+          Success(Right(accounts.update(account.accountNumber, account)))
+      }
   }
 
 }

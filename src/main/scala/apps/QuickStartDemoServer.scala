@@ -35,9 +35,12 @@ object QuickStartDemoServer extends App with AccountRoutes {
 
   val routes: Route = accountRoutes
   val port: Int     = 8081 // TODO: Load in from config file
-  val host: String  = "localhost"
+  val host: String  = "0.0.0.0"
+
+
 
   Http().bindAndHandle(routes, host, port)
+
   logger.info(s"Server online at http://$host:$port/")
   Await.result(system.whenTerminated, Duration.Inf)
 }

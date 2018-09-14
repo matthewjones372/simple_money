@@ -29,6 +29,11 @@ lazy val root = (project in file(".")).settings(
 scalacOptions += "-deprecation"
 
 
+dockerBaseImage := "openjdk:jre-alpine"
+enablePlugins(AshScriptPlugin)
+enablePlugins(JavaAppPackaging)
+enablePlugins(DockerPlugin)
+
 resolvers ++= Seq(
   Resolver.bintrayRepo("hseeberger", "maven"),
   Resolver.bintrayRepo("scalameta", "maven")

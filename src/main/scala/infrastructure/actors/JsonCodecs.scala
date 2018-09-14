@@ -10,7 +10,8 @@ import domain.model.{Currency, CurrencyAccount}
 trait JsonCodecs {
   implicit val configCirce: Configuration = Configuration.default.withDiscriminator("type")
 
-  implicit val accountEncoder: Encoder[CurrencyAccount] = deriveEncoder[CurrencyAccount]
+  implicit val accountEncoder: Encoder[CurrencyAccount] =
+    deriveEncoder[CurrencyAccount]
   implicit val accountDecoder: Decoder[CurrencyAccount] = deriveDecoder[CurrencyAccount]
 
   implicit val currencyEncoder: Encoder[Currency] = deriveEncoder[Currency]

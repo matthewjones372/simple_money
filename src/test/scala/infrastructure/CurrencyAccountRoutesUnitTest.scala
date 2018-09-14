@@ -69,7 +69,7 @@ class CurrencyAccountRoutesUnitTest
 
     "(POST :/api/accounts) should" - {
       "post a new account" in {
-        val newAccountPost = PostNewAccount("SOME_IBAN", 50.0, Currency.GBP)
+        val newAccountPost = PostNewAccount("SOME_ACCOUNT_NUMBER", 50.0, Currency.GBP)
 
         val eventualEntity = Marshal(newAccountPost).to[MessageEntity]
 

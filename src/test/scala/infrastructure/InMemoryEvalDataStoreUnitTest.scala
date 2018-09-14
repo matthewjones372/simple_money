@@ -66,7 +66,7 @@ class InMemoryEvalDataStoreUnitTest extends FreeSpec with Matchers with  Transfe
     val testAccount6 = CurrencyAccount("6666", 66.1, Currency.USD)
 
 
-    val someAccount = CurrencyAccount("SOME_IBAN", 192, Currency.EUR)
+    val someAccount = CurrencyAccount("SOME_ACCOUNT_NUMBER", 192, Currency.EUR)
 
     val nonExistingAccount = CurrencyAccount("DUMMY_ACCOUNT", 1.1, Currency.EUR)
 
