@@ -36,7 +36,6 @@ enablePlugins(AshScriptPlugin)
 enablePlugins(JavaAppPackaging)
 enablePlugins(DockerPlugin)
 
-scalafmtTestOnCompile := true
 
 resolvers ++= Seq(
   Resolver.bintrayRepo("hseeberger", "maven"),

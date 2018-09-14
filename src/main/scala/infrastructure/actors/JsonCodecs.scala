@@ -1,11 +1,10 @@
 package infrastructure.actors
 
-import infrastructure.actors.AccountActor.{
-  HttpResponse, PostNewAccount, transferBetweenAccounts}
+import infrastructure.actors.AccountActor.{ HttpResponse, PostNewAccount, transferBetweenAccounts }
 import io.circe.generic.extras.Configuration
-import io.circe.generic.extras.semiauto.{deriveDecoder, deriveEncoder}
-import io.circe.{Decoder, Encoder}
-import domain.model.{Currency, CurrencyAccount}
+import io.circe.generic.extras.semiauto.{ deriveDecoder, deriveEncoder }
+import io.circe.{ Decoder, Encoder }
+import domain.model.{ Currency, CurrencyAccount }
 
 trait JsonCodecs {
   implicit val configCirce: Configuration = Configuration.default.withDiscriminator("type")

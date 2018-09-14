@@ -16,7 +16,9 @@ class InMemoryEvalDataStore extends AccountGatewayAlg[Eval] {
     currencyAccounts.values.toVector
   }
 
-  override def getAccount(accountNumber: String): Eval[Either[TransferServiceErrors, CurrencyAccount]] =
+  override def getAccount(
+      accountNumber: String
+  ): Eval[Either[TransferServiceErrors, CurrencyAccount]] =
     Eval.now {
       currencyAccounts
         .get(accountNumber)

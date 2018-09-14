@@ -1,11 +1,11 @@
 package apps
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.{ ActorRef, ActorSystem }
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Route
 import akka.stream.ActorMaterializer
 import cats.Eval
-import infrastructure.actors.{AccountActor, AccountRoutes}
+import infrastructure.actors.{ AccountActor, AccountRoutes }
 import infrastructure.dataStores.InMemoryEvalDataStore
 import infrastructure.loggers.EvalLogger
 import service.AccountTransferService
@@ -23,7 +23,6 @@ object QuickStartDemoServer extends App with AccountRoutes {
   lazy val dataStore: InMemoryEvalDataStore =
     new InMemoryEvalDataStore
 
-
   lazy val logger: EvalLogger =
     new EvalLogger
 
@@ -36,8 +35,6 @@ object QuickStartDemoServer extends App with AccountRoutes {
   val routes: Route = accountRoutes
   val port: Int     = 8081 // TODO: Load in from config file
   val host: String  = "0.0.0.0"
-
-
 
   Http().bindAndHandle(routes, host, port)
 

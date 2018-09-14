@@ -2,10 +2,10 @@ package infrastructure.actors
 
 import java.text.DecimalFormat
 
-import akka.actor.{Actor, ActorLogging, Props}
+import akka.actor.{ Actor, ActorLogging, Props }
 import akka.util.Timeout
 import cats.Eval
-import domain.model.{Currency, CurrencyAccount}
+import domain.model.{ Currency, CurrencyAccount }
 import infrastructure.actors.AccountActor._
 import service.AccountTransferService
 
@@ -19,12 +19,13 @@ class AccountActor(transferService: AccountTransferService[Eval]) extends Actor 
 
   override def receive: PartialFunction[Any, Unit] = {
 
-
     case GetAccounts =>
       sender() ! transferService.listAllAccounts.value
 
     case PostNewAccount(accountNumber, balance, currency) =>
-      val response = transferService.addNewAccount(CurrencyAccount(accountNumber, balance, currency)) map {
+      val response = transferService.addNewAccount(
+        CurrencyAccount(accountNumber, balance, currency)
+      ) map {
         case Right(_) =>
           s"Successfully added $accountNumber into the Datastore"
         case Left(err) =>
@@ -33,14 +34,15 @@ class AccountActor(transferService: AccountTransferService[Eval]) extends Actor 
       sender() ! HttpResponse(response.value)
 
     case transferBetweenAccounts(fromAccountNumber, toAccountNumber, amount) =>
-      val response: Eval[String] = transferService.accountTransfer(fromAccountNumber, toAccountNumber, amount) map {
+      val response: Eval[String] = transferService.accountTransfer(fromAccountNumber,
+                                                                   toAccountNumber,
+                                                                   amount) map {
         case Right(_) =>
           s"${formatter.format(amount)} has been transferred from $fromAccountNumber to $toAccountNumber"
         case Left(err) =>
           s"Transfer unsuccessful from account $fromAccountNumber to $toAccountNumber error: ${err.toString}"
       }
       sender() ! HttpResponse(response.value)
-
 
   }
 }
