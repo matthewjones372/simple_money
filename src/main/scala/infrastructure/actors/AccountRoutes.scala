@@ -27,7 +27,7 @@ trait AccountRoutes extends FailFastCirceSupport with JsonCodecs {
   lazy val accountRoutes: Route = {
     pathPrefix("api" / "accounts" / "transfer") {
       (pathEndOrSingleSlash & put) {
-        entity(as[transferBetweenAccounts]) { transferRequest =>
+        entity(as[TransferBetweenAccounts]) { transferRequest =>
           complete((currencyAccountActor ? transferRequest).mapTo[HttpResponse])
         }
       }

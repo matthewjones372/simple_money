@@ -1,7 +1,33 @@
 package domain.model
 
 final case class CurrencyAccount(
-    accountNumber: String,
-    balance: Double,
+    accountNumber: AccountNumber,
+    balance: CurrencyAmount,
     currency: Currency
 )
+
+
+final case class AccountNumber (value: String) extends AnyVal {
+  def !=(that: AccountNumber): Boolean = this.value != that.value
+}
+
+
+object AccountNumber {
+  def fromString(value: String): AccountNumber = AccountNumber(value)
+}
+
+final case class CurrencyAmount(value: BigDecimal){
+
+  def +(that: CurrencyAmount): CurrencyAmount = CurrencyAmount(this.value + that.value)
+
+  def -(that: CurrencyAmount): CurrencyAmount = CurrencyAmount(this.value - that.value)
+
+
+  def >=(that: CurrencyAmount): Boolean = this.value >= that.value
+
+  def >(that: CurrencyAmount): Boolean = this.value > that.value
+}
+
+object CurrencyAmount {
+  def fromBigDecimal(value: BigDecimal): CurrencyAmount = CurrencyAmount(value)
+}

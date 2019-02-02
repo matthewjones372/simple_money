@@ -14,4 +14,6 @@ trait TransferServiceErrors {
 
   case object CannotTransferToAccountWithDifferentCurrency extends TransferServiceErrors
 
+  case object CannotTransferNegativeAmount extends TransferServiceErrors
+
 }

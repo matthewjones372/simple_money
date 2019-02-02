@@ -23,8 +23,7 @@ object QuickStartDemoServer extends App with AccountRoutes {
   lazy val dataStore: InMemoryEvalDataStore =
     new InMemoryEvalDataStore
 
-  lazy val logger: EvalLogger =
-    new EvalLogger
+  lazy val logger: EvalLogger = new EvalLogger
 
   lazy val transferService: AccountTransferService[Eval] =
     new AccountTransferService[Eval](dataStore, logger)

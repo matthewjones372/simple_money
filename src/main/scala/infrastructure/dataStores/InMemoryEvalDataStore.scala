@@ -4,7 +4,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import cats.Eval
 import domain.algebra.AccountGatewayAlg
-import domain.model.CurrencyAccount
+import domain.model.{AccountNumber, CurrencyAccount}
 import service.TransferServiceErrors
 
 import scala.collection.JavaConverters._
@@ -17,18 +17,18 @@ class InMemoryEvalDataStore extends AccountGatewayAlg[Eval] {
   }
 
   override def getAccount(
-      accountNumber: String
+      accountNumber: AccountNumber
   ): Eval[Either[TransferServiceErrors, CurrencyAccount]] =
     Eval.now {
       currencyAccounts
-        .get(accountNumber)
+        .get(accountNumber.value)
         .map(Right(_))
         .getOrElse(Left(AccountDoesNotExist))
     }
 
   override def updateAccount(account: CurrencyAccount): Eval[Either[TransferServiceErrors, Unit]] =
     Eval.now {
-      currencyAccounts.put(account.accountNumber, account) match {
+      currencyAccounts.put(account.accountNumber.value, account) match {
         case Some(_) => Right(())
         case None    => Left(FailedToUpdateAccount)
       }
@@ -36,10 +36,10 @@ class InMemoryEvalDataStore extends AccountGatewayAlg[Eval] {
 
   override def postAccount(account: CurrencyAccount): Eval[Either[TransferServiceErrors, Unit]] =
     Eval.now {
-      if (currencyAccounts.isDefinedAt(account.accountNumber)) {
+      if (currencyAccounts.isDefinedAt(account.accountNumber.value)) {
         Left(AccountAlreadyExists)
       } else {
-        Right(currencyAccounts.update(account.accountNumber, account))
+        Right(currencyAccounts.update(account.accountNumber.value, account))
       }
     }
 

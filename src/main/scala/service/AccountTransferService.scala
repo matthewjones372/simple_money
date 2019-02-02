@@ -1,18 +1,16 @@
 package service
 
-import java.text.DecimalFormat
-
 import cats.Monad
 import cats.data.EitherT
-import domain.algebra.{ AccountGatewayAlg, LoggingAlg }
-import domain.model.CurrencyAccount
+import domain.algebra.{AccountGatewayAlg, LoggingAlg}
+import domain.model.{AccountNumber, CurrencyAccount, CurrencyAmount}
 
 import scala.language.higherKinds
 
 class AccountTransferService[F[_]](
-    gateway: AccountGatewayAlg[F],
-    logger: LoggingAlg[F]
-)(implicit M: Monad[F]) {
+                                    gateway: AccountGatewayAlg[F],
+                                    logger: LoggingAlg[F]
+                                  )(implicit M: Monad[F]) {
 
   import M._
 
@@ -22,23 +20,25 @@ class AccountTransferService[F[_]](
   def addNewAccount(account: CurrencyAccount): F[Either[TransferServiceErrors, Unit]] =
     gateway.postAccount(account)
 
-  def accountTransfer(fromAccountNumber: String,
-                      toAccountNumber: String,
-                      transferAmount: Double): F[Either[TransferServiceErrors, Unit]] = {
+  def accountTransfer(fromAccountNumber: AccountNumber,
+                      toAccountNumber: AccountNumber,
+                      transferAmount: CurrencyAmount): F[Either[TransferServiceErrors, Unit]] = {
 
     def lift[A](fa: F[A]): EitherT[F, TransferServiceErrors, A] =
       EitherT.liftF[F, TransferServiceErrors, A](fa)
 
     (for {
-      _           <- EitherT(pure(areDifferentAccounts(fromAccountNumber, toAccountNumber)))
-      fromAccount <- EitherT(gateway.getAccount(fromAccountNumber))
-      toAccount   <- EitherT(gateway.getAccount(toAccountNumber))
+      _ <- EitherT(pure(nonNegativeTransferAmount(transferAmount)))
+      _ <- EitherT(pure(areDifferentAccounts(fromAccountNumber, toAccountNumber)))
+      fromAccount <- EitherT(gateway.getAccount
+      (fromAccountNumber))
+      toAccount <- EitherT(gateway.getAccount(toAccountNumber))
 
       _ <- EitherT(pure(haveSameCurrency(fromAccount, toAccount)))
       _ <- EitherT(pure(hasSufficientBalance(fromAccount, transferAmount)))
 
       updatedFromAccount <- lift(pure(subtractBalance(fromAccount, transferAmount)))
-      updatedToAccount   <- lift(pure(addBalance(toAccount, transferAmount)))
+      updatedToAccount <- lift(pure(addBalance(toAccount, transferAmount)))
 
       _ <- lift(pure(gateway.updateAccount(updatedFromAccount)))
       _ <- lift(logger.info(updatedLogMessage(fromAccount, updatedFromAccount)))
@@ -48,20 +48,28 @@ class AccountTransferService[F[_]](
   }
 
   private def subtractBalance(fromAccount: CurrencyAccount,
-                              transferAmount: Double): CurrencyAccount =
+                              transferAmount: CurrencyAmount): CurrencyAccount =
     fromAccount.copy(balance = fromAccount.balance - transferAmount)
 
-  private def addBalance(toAccount: CurrencyAccount, transferAmount: Double): CurrencyAccount =
+  private def addBalance(toAccount: CurrencyAccount, transferAmount: CurrencyAmount): CurrencyAccount =
     toAccount.copy(balance = toAccount.balance + transferAmount)
 
   private def updatedLogMessage(before: CurrencyAccount, after: CurrencyAccount) = {
-    val formatter = new DecimalFormat("#.##")
-    s"Updated Account: ${before.accountNumber}: Balance updated from ${formatter.format(before.balance)} " +
-    s"${before.currency.toString} to ${formatter.format(after.balance)} ${after.currency.toString}"
+    s"""Updated Account: ${before.accountNumber.value}: Balance updated from ${before.balance.value} """ +
+      s"""${before.currency.toString} to ${after.balance.value} ${after.currency.toString}"""
+  }
+
+  private def nonNegativeTransferAmount(transferAmount: CurrencyAmount): Either[TransferServiceErrors, Unit] = {
+
+    if (transferAmount.value > 0) {
+      Right(())
+    } else {
+      Left(gateway.CannotTransferNegativeAmount)
+    }
   }
 
   private def hasSufficientBalance(account: CurrencyAccount,
-                                   transferAmount: Double): Either[TransferServiceErrors, Unit] =
+                                   transferAmount: CurrencyAmount): Either[TransferServiceErrors, Unit] =
     if (account.balance >= transferAmount) {
       Right(())
     } else {
@@ -76,9 +84,9 @@ class AccountTransferService[F[_]](
       Left(gateway.CannotTransferToAccountWithDifferentCurrency)
     }
 
-  private def areDifferentAccounts(fromAccountNumber: String,
-                                   toAccountNumber: String): Either[TransferServiceErrors, Unit] =
-    if (!fromAccountNumber.equals(toAccountNumber)) {
+  private def areDifferentAccounts(fromAccountNumber: AccountNumber,
+                                   toAccountNumber: AccountNumber): Either[TransferServiceErrors, Unit] =
+    if (fromAccountNumber != toAccountNumber) {
       Right(())
     } else {
       Left(gateway.CannotTransferToSameAccount)

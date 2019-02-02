@@ -2,10 +2,10 @@ package infrastructure.actors
 
 import java.text.DecimalFormat
 
-import akka.actor.{ Actor, ActorLogging, Props }
+import akka.actor.{Actor, ActorLogging, Props}
 import akka.util.Timeout
 import cats.Eval
-import domain.model.{ Currency, CurrencyAccount }
+import domain.model.{AccountNumber, Currency, CurrencyAccount, CurrencyAmount}
 import infrastructure.actors.AccountActor._
 import service.AccountTransferService
 
@@ -24,7 +24,9 @@ class AccountActor(transferService: AccountTransferService[Eval]) extends Actor 
 
     case PostNewAccount(accountNumber, balance, currency) =>
       val response = transferService.addNewAccount(
-        CurrencyAccount(accountNumber, balance, currency)
+        CurrencyAccount(AccountNumber.fromString(accountNumber),
+          CurrencyAmount.fromBigDecimal(balance),
+          currency)
       ) map {
         case Right(_) =>
           s"Successfully added $accountNumber into the Datastore"
@@ -33,10 +35,11 @@ class AccountActor(transferService: AccountTransferService[Eval]) extends Actor 
       }
       sender() ! HttpResponse(response.value)
 
-    case transferBetweenAccounts(fromAccountNumber, toAccountNumber, amount) =>
-      val response: Eval[String] = transferService.accountTransfer(fromAccountNumber,
-                                                                   toAccountNumber,
-                                                                   amount) map {
+    case TransferBetweenAccounts(fromAccountNumber, toAccountNumber, amount) =>
+      val response: Eval[String] = transferService.accountTransfer(
+        AccountNumber.fromString(fromAccountNumber),
+        AccountNumber.fromString(toAccountNumber),
+        CurrencyAmount.fromBigDecimal(amount)) map {
         case Right(_) =>
           s"${formatter.format(amount)} has been transferred from $fromAccountNumber to $toAccountNumber"
         case Left(err) =>
@@ -51,17 +54,16 @@ object AccountActor {
 
   final case object GetAccounts
 
-  final case class PostNewAccount(accountNumber: String, balance: Double, currency: Currency)
+  final case class PostNewAccount(accountNumber: String, balance: BigDecimal, currency: Currency)
 
   final case class HttpResponse(response: String)
 
+
   final case class GetCurrencyAccount(accountNumber: String)
 
-  final case class transferBetweenAccounts(
-      fromAccountNumber: String,
-      toAccountNumber: String,
-      amount: Double
-  )
+  final case class TransferBetweenAccounts(fromAccountNumber: String,
+                                           toAccountNumber: String,
+                                           amount: BigDecimal)
 
   def props(transferService: AccountTransferService[Eval]): Props =
     Props(new AccountActor(transferService))

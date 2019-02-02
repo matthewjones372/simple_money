@@ -1,7 +1,7 @@
 package infrastructure
 
 import infrastructure.dataStores.InMemoryEvalDataStore
-import domain.model.{Currency, CurrencyAccount}
+import domain.model.{CurrencyAmount, AccountNumber, Currency, CurrencyAccount}
 import org.scalatest.{FreeSpec, Matchers}
 import service.TransferServiceErrors
 
@@ -18,11 +18,11 @@ class InMemoryEvalDataStoreUnitTest extends FreeSpec with Matchers with  Transfe
 
     "GetAccount should" - {
       "return the correct account" in new TestSuite {
-        testDataStore.getAccount("4444").value shouldBe Right(testAccount4)
+        testDataStore.getAccount(AccountNumber("4444")).value shouldBe Right(testAccount4)
       }
 
       "return AccountDoesNotExist when a non existing account is requested" in new TestSuite {
-        testDataStore.getAccount("SOME_DUMMY_ACCOUNT").value.toString shouldBe Left(AccountDoesNotExist).toString
+        testDataStore.getAccount(AccountNumber("SOME_DUMMY_ACCOUNT")).value.toString shouldBe Left(AccountDoesNotExist).toString
       }
     }
 
@@ -31,10 +31,10 @@ class InMemoryEvalDataStoreUnitTest extends FreeSpec with Matchers with  Transfe
         testDataStore.updateAccount(nonExistingAccount).value == Left(FailedToUpdateAccount)
       }
       "update the correct account" in new TestSuite {
-        val expectedNumber = 4827.32
+        val expectedNumber = CurrencyAmount(4827.32)
         testDataStore.updateAccount(testAccount2.copy(balance = expectedNumber))
-        testDataStore.getAccount("2222").value shouldBe Right(
-          CurrencyAccount("2222", expectedNumber, Currency.GBP)
+        testDataStore.getAccount(AccountNumber("2222")).value shouldBe Right(
+          CurrencyAccount(AccountNumber("2222"), expectedNumber, Currency.GBP)
         )
       }
     }
@@ -58,19 +58,20 @@ class InMemoryEvalDataStoreUnitTest extends FreeSpec with Matchers with  Transfe
     val testDataStore: InMemoryEvalDataStore =
       new InMemoryEvalDataStore
 
-    val testAccount1 = CurrencyAccount("1111", 10.1, Currency.GBP)
-    val testAccount2 = CurrencyAccount("2222", 22.1, Currency.GBP)
-    val testAccount3 = CurrencyAccount("3333", 33.1, Currency.GBP)
-    val testAccount4 = CurrencyAccount("4444", 44.1, Currency.USD)
-    val testAccount5 = CurrencyAccount("5555", 55.1, Currency.EUR)
-    val testAccount6 = CurrencyAccount("6666", 66.1, Currency.USD)
+    val testAccount1 = CurrencyAccount(AccountNumber("1111"), CurrencyAmount(10.1), Currency.GBP)
+    val testAccount2 = CurrencyAccount(AccountNumber("2222"), CurrencyAmount(22.1), Currency.GBP)
+    val testAccount3 = CurrencyAccount(AccountNumber("3333"), CurrencyAmount(33.1), Currency.GBP)
+    val testAccount4 = CurrencyAccount(AccountNumber("4444"), CurrencyAmount(44.1), Currency.USD)
+    val testAccount5 = CurrencyAccount(AccountNumber("5555"), CurrencyAmount(55.1), Currency.EUR)
+    val testAccount6 = CurrencyAccount(AccountNumber("6666"), CurrencyAmount(66.1), Currency.USD)
 
 
-    val someAccount = CurrencyAccount("SOME_ACCOUNT_NUMBER", 192, Currency.EUR)
+    val someAccount =
+      CurrencyAccount(AccountNumber("SOME_ACCOUNT_NUMBER"), CurrencyAmount(192), Currency.EUR)
 
-    val nonExistingAccount = CurrencyAccount("DUMMY_ACCOUNT", 1.1, Currency.EUR)
+    val nonExistingAccount = CurrencyAccount(AccountNumber("DUMMY_ACCOUNT"), CurrencyAmount(1.1), Currency.EUR)
 
-    val accounts = Vector(
+    val accounts: Vector[CurrencyAccount] = Vector(
       testAccount1,
       testAccount2,
       testAccount3,
