@@ -2,16 +2,16 @@ package infrastructure
 
 import akka.actor.ActorRef
 import akka.http.scaladsl.marshalling.Marshal
-import akka.http.scaladsl.model.{ContentTypes, HttpRequest, MessageEntity, StatusCodes}
+import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import cats.Eval
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
-import infrastructure.actors.AccountActor.{HttpResponse, PostNewAccount, TransferBetweenAccounts}
+import domain.model.{AccountNumber, Currency, CurrencyAccount, CurrencyAmount}
+import infrastructure.actors.AccountActor.{PostNewAccount, TransferBetweenAccounts}
 import infrastructure.actors.{AccountActor, AccountRoutes}
 import infrastructure.dataStores.InMemoryEvalDataStore
 import infrastructure.loggers.EvalLogger
-import domain.model.{AccountNumber, Currency, CurrencyAccount, CurrencyAmount}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FreeSpec, Matchers}
 import service.AccountTransferService
@@ -102,7 +102,7 @@ class CurrencyAccountRoutesUnitTest
           status shouldBe StatusCodes.OK
           contentType shouldBe ContentTypes.`application/json`
           responseAs[HttpResponse] shouldBe HttpResponse(
-            "40 has been transferred from Account1 to Account2"
+            entity=HttpEntity(ContentTypes.`application/json`, "40 has been transferred from Account1 to Account2")
           )
         }
 
@@ -120,9 +120,8 @@ class CurrencyAccountRoutesUnitTest
         val request = Put("/api/accounts/transfer").withEntity(transferEntity)
 
         request ~> routes ~> check {
-          status shouldBe StatusCodes.OK
+          status shouldBe StatusCodes.BadRequest
           contentType shouldBe ContentTypes.`application/json`
-          responseAs[HttpResponse].response.split(" ") should contain("AccountDoesNotExist")
         }
 
       }

@@ -1,7 +1,7 @@
 package infrastructure.actors
 
 import domain.model.{AccountNumber, Currency, CurrencyAccount, CurrencyAmount}
-import infrastructure.actors.AccountActor.{HttpResponse, PostNewAccount, TransferBetweenAccounts}
+import infrastructure.actors.AccountActor.{PostNewAccount, TransferBetweenAccounts}
 import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.semiauto.{deriveDecoder, deriveEncoder}
 import io.circe.{Decoder, Encoder}
@@ -28,6 +28,4 @@ trait JsonCodecs {
   implicit val newAccountEncoder: Encoder[PostNewAccount] = deriveEncoder[PostNewAccount]
   implicit val newAccountDecoder: Decoder[PostNewAccount] = deriveDecoder[PostNewAccount]
 
-  implicit val actionPerformedEncoder: Encoder[HttpResponse] = deriveEncoder[HttpResponse]
-  implicit val actionPerformedDecoder: Decoder[HttpResponse] = deriveDecoder[HttpResponse]
 }

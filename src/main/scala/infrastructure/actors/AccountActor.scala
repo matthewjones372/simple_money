@@ -1,8 +1,8 @@
 package infrastructure.actors
 
-import java.text.DecimalFormat
-
 import akka.actor.{Actor, ActorLogging, Props}
+import akka.http.scaladsl.model.StatusCodes._
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpResponse}
 import akka.util.Timeout
 import cats.Eval
 import domain.model.{AccountNumber, Currency, CurrencyAccount, CurrencyAmount}
@@ -15,7 +15,6 @@ class AccountActor(transferService: AccountTransferService[Eval]) extends Actor 
 
   implicit lazy val timeout: Timeout = Timeout(5.seconds) // TODO: Load in from config file
 
-  lazy val formatter = new DecimalFormat("#.##")
 
   override def receive: PartialFunction[Any, Unit] = {
 
@@ -29,24 +28,25 @@ class AccountActor(transferService: AccountTransferService[Eval]) extends Actor 
           currency)
       ) map {
         case Right(_) =>
-          s"Successfully added $accountNumber into the Datastore"
+          HttpResponse(entity = HttpEntity(ContentTypes.`application/json`, s"Successfully added $accountNumber into the datastore"))
         case Left(err) =>
-          s"Could not add $accountNumber into the data store reason: $err"
+          HttpResponse(BadRequest, entity=HttpEntity(ContentTypes.`application/json`, s"Could not add $accountNumber into the data store reason: $err"))
       }
-      sender() ! HttpResponse(response.value)
+      sender() ! response.value
 
     case TransferBetweenAccounts(fromAccountNumber, toAccountNumber, amount) =>
-      val response: Eval[String] = transferService.accountTransfer(
+      val response: Eval[HttpResponse] = transferService.accountTransfer(
         AccountNumber.fromString(fromAccountNumber),
         AccountNumber.fromString(toAccountNumber),
-        CurrencyAmount.fromBigDecimal(amount)) map {
+        CurrencyAmount.fromBigDecimal(amount)).map{
         case Right(_) =>
-          s"${formatter.format(amount)} has been transferred from $fromAccountNumber to $toAccountNumber"
+          HttpResponse(entity = HttpEntity(ContentTypes.`application/json`, s"$amount has been transferred from $fromAccountNumber to $toAccountNumber"))
         case Left(err) =>
-          s"Transfer unsuccessful from account $fromAccountNumber to $toAccountNumber error: ${err.toString}"
+          HttpResponse(BadRequest, entity = HttpEntity(ContentTypes.`application/json`,
+            s"Transfer unsuccessful from account $fromAccountNumber to $toAccountNumber error: ${err.toString}"))
       }
-      sender() ! HttpResponse(response.value)
 
+      sender() ! response.value
   }
 }
 
@@ -56,9 +56,6 @@ object AccountActor {
 
   final case class PostNewAccount(accountNumber: String, balance: BigDecimal, currency: Currency)
 
-  final case class HttpResponse(response: String)
-
-
   final case class GetCurrencyAccount(accountNumber: String)
 
   final case class TransferBetweenAccounts(fromAccountNumber: String,
@@ -67,5 +64,4 @@ object AccountActor {
 
   def props(transferService: AccountTransferService[Eval]): Props =
     Props(new AccountActor(transferService))
-
 }
