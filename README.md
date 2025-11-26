@@ -29,6 +29,7 @@ $sbt compile
 $sbt run
 ```
 *   Will launch a demo server on http://localhost:8081
+*   Generated Swagger UI is available at http://localhost:8081/docs with the OpenAPI spec at http://localhost:8081/docs.yaml
 
 ## Running the tests
 
