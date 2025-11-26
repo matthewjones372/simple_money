@@ -16,7 +16,6 @@ import infrastructure.actors.CirceSupport
 import sttp.model.StatusCode
 import sttp.tapir._
 import sttp.tapir.stringToPath
-import sttp.tapir.syntax.all._
 import sttp.tapir.generic.auto._
 import sttp.tapir.json.circe._
 import sttp.tapir.server.pekkohttp.PekkoHttpServerInterpreter
