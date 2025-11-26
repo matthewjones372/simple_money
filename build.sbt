@@ -10,7 +10,7 @@ lazy val root = (project in file(".")).settings(
   inThisBuild(
     List(
       organization := "com.matt",
-      scalaVersion := "3.3.1"
+      scalaVersion := "3.7.4"
     )
   ),
   name := "simple_money",
