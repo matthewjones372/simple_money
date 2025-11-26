@@ -4,6 +4,7 @@ import org.apache.pekko.actor.{ActorRef, ActorSystem}
 import org.apache.pekko.event.Logging
 import org.apache.pekko.http.scaladsl.model.HttpResponse
 import org.apache.pekko.http.scaladsl.server.Directives.{pathPrefix, _}
+import org.apache.pekko.http.scaladsl.server.PathMatchers._
 import org.apache.pekko.http.scaladsl.server.Route
 import org.apache.pekko.http.scaladsl.server.directives.MethodDirectives.get
 import org.apache.pekko.http.scaladsl.server.directives.RouteDirectives.complete
@@ -15,6 +16,7 @@ import infrastructure.actors.CirceSupport
 import sttp.model.StatusCode
 import sttp.tapir._
 import sttp.tapir.stringToPath
+import sttp.tapir.syntax.all._
 import sttp.tapir.generic.auto._
 import sttp.tapir.json.circe._
 import sttp.tapir.server.pekkohttp.PekkoHttpServerInterpreter
