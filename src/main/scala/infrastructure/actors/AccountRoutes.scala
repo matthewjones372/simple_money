@@ -1,23 +1,26 @@
 package infrastructure.actors
 
-import akka.actor.{ActorRef, ActorSystem}
-import akka.event.Logging
-import akka.http.scaladsl.model.HttpResponse
-import akka.http.scaladsl.server.Directives.{pathPrefix, _}
-import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.server.directives.MethodDirectives.get
-import akka.http.scaladsl.server.directives.RouteDirectives.complete
-import akka.pattern.ask
-import akka.util.Timeout
-import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
+import org.apache.pekko.actor.{ActorRef, ActorSystem}
+import org.apache.pekko.event.Logging
+import org.apache.pekko.http.scaladsl.model.HttpResponse
+import org.apache.pekko.http.scaladsl.server.Directives.{pathPrefix, _}
+import org.apache.pekko.http.scaladsl.server.Route
+import org.apache.pekko.http.scaladsl.server.directives.MethodDirectives.get
+import org.apache.pekko.http.scaladsl.server.directives.RouteDirectives.complete
+import org.apache.pekko.pattern.ask
+import org.apache.pekko.util.Timeout
 import domain.model.CurrencyAccount
 import infrastructure.actors.AccountActor._
+import infrastructure.actors.CirceSupport
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
-trait AccountRoutes extends FailFastCirceSupport with JsonCodecs {
+trait AccountRoutes extends CirceSupport with JsonCodecs {
 
   implicit def system: ActorSystem
+
+  implicit def executionContext: ExecutionContext = system.dispatcher
 
   lazy val log = Logging(system, classOf[AccountRoutes])
 

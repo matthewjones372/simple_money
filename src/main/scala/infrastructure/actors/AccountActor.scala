@@ -1,11 +1,13 @@
 package infrastructure.actors
 
-import akka.actor.{Actor, ActorLogging, Props}
-import akka.http.scaladsl.model.StatusCodes._
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpResponse}
-import akka.util.Timeout
+import java.util.Currency
+
+import org.apache.pekko.actor.{Actor, ActorLogging, Props}
+import org.apache.pekko.http.scaladsl.model.StatusCodes._
+import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpEntity, HttpResponse}
+import org.apache.pekko.util.Timeout
 import cats.Eval
-import domain.model.{AccountNumber, Currency, CurrencyAccount, CurrencyAmount}
+import domain.model.{AccountNumber, CurrencyAccount, CurrencyAmount}
 import infrastructure.actors.AccountActor._
 import service.AccountTransferService
 
@@ -52,15 +54,15 @@ class AccountActor(transferService: AccountTransferService[Eval]) extends Actor 
 
 object AccountActor {
 
-  final case object GetAccounts
+  case object GetAccounts
 
-  final case class PostNewAccount(accountNumber: String, balance: BigDecimal, currency: Currency)
+  case class PostNewAccount(accountNumber: String, balance: BigDecimal, currency: Currency)
 
-  final case class GetCurrencyAccount(accountNumber: String)
+  case class GetCurrencyAccount(accountNumber: String)
 
-  final case class TransferBetweenAccounts(fromAccountNumber: String,
-                                           toAccountNumber: String,
-                                           amount: BigDecimal)
+  case class TransferBetweenAccounts(fromAccountNumber: String,
+                                     toAccountNumber: String,
+                                     amount: BigDecimal)
 
   def props(transferService: AccountTransferService[Eval]): Props =
     Props(new AccountActor(transferService))

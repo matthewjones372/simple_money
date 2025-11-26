@@ -1,5 +1,7 @@
 package domain.model
 
+import java.util.Currency
+
 final case class CurrencyAccount(
     accountNumber: AccountNumber,
     balance: CurrencyAmount,

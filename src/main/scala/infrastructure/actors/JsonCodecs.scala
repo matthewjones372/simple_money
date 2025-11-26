@@ -1,26 +1,29 @@
 package infrastructure.actors
 
-import domain.model.{AccountNumber, Currency, CurrencyAccount, CurrencyAmount}
+import java.util.Currency
+
+import domain.model.{AccountNumber, CurrencyAccount, CurrencyAmount}
 import infrastructure.actors.AccountActor.{PostNewAccount, TransferBetweenAccounts}
-import io.circe.generic.extras.Configuration
-import io.circe.generic.extras.semiauto.{deriveDecoder, deriveEncoder}
+import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 import io.circe.{Decoder, Encoder}
 
+import scala.util.Try
+
 trait JsonCodecs {
-  implicit val configCirce: Configuration = Configuration.default.withDiscriminator("type")
+  implicit val accountNumberEncoder: Encoder[AccountNumber] = Encoder.encodeString.contramap(_.value)
+  implicit val accountNumberDecoder: Decoder[AccountNumber] = Decoder.decodeString.map(AccountNumber.fromString)
 
-  implicit val accountNumberEncoder: Encoder[AccountNumber] = deriveEncoder[AccountNumber]
-  implicit val accountNumberDecoder: Decoder[AccountNumber] = deriveDecoder[AccountNumber]
+  implicit val currencyAmountEncoder: Encoder[CurrencyAmount] = Encoder.encodeBigDecimal.contramap(_.value)
 
-  implicit val currencyAmountEncoder: Encoder[CurrencyAmount] = deriveEncoder[CurrencyAmount]
+  implicit val currencyAmountDecoder: Decoder[CurrencyAmount] = Decoder.decodeBigDecimal.map(CurrencyAmount.fromBigDecimal)
 
-  implicit val currencyAmountDecoder: Decoder[CurrencyAmount] = deriveDecoder[CurrencyAmount]
+  implicit val currencyEncoder: Encoder[Currency] = Encoder.encodeString.contramap(_.getCurrencyCode)
+  implicit val currencyDecoder: Decoder[Currency] = Decoder.decodeString.emap { code =>
+    Try(Currency.getInstance(code)).toEither.left.map(_ => s"Unknown currency $code")
+  }
 
-  implicit val accountEncoder: Encoder[CurrencyAccount] =deriveEncoder[CurrencyAccount]
+  implicit val accountEncoder: Encoder[CurrencyAccount] = deriveEncoder[CurrencyAccount]
   implicit val accountDecoder: Decoder[CurrencyAccount] = deriveDecoder[CurrencyAccount]
-
-  implicit val currencyEncoder: Encoder[Currency] = deriveEncoder[Currency]
-  implicit val currencyDecoder: Decoder[Currency] = deriveDecoder[Currency]
 
   implicit val transferBetweenAccountsEncoder: Encoder[TransferBetweenAccounts] = deriveEncoder[TransferBetweenAccounts]
   implicit val transferBetweenAccountsDecoder: Decoder[TransferBetweenAccounts] = deriveDecoder[TransferBetweenAccounts]

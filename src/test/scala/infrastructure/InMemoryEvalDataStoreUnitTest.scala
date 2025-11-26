@@ -1,11 +1,15 @@
 package infrastructure
 
-import infrastructure.dataStores.InMemoryEvalDataStore
-import domain.model.{CurrencyAmount, AccountNumber, Currency, CurrencyAccount}
-import org.scalatest.{FreeSpec, Matchers}
-import service.TransferServiceErrors
+import java.util.Currency
 
-class InMemoryEvalDataStoreUnitTest extends FreeSpec with Matchers with  TransferServiceErrors{
+import domain.model.{AccountNumber, CurrencyAccount, CurrencyAmount}
+import infrastructure.dataStores.InMemoryEvalDataStore
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
+import service.TransferServiceErrors
+import service.TransferServiceErrors._
+
+class InMemoryEvalDataStoreUnitTest extends AnyFreeSpec with Matchers{
 
   "InMemoryAccountDataStore" - {
     "ListAllAccounts should list accounts correctly" in new TestSuite {
@@ -34,18 +38,18 @@ class InMemoryEvalDataStoreUnitTest extends FreeSpec with Matchers with  Transfe
         val expectedNumber = CurrencyAmount(4827.32)
         testDataStore.updateAccount(testAccount2.copy(balance = expectedNumber))
         testDataStore.getAccount(AccountNumber("2222")).value shouldBe Right(
-          CurrencyAccount(AccountNumber("2222"), expectedNumber, Currency.GBP)
+          CurrencyAccount(AccountNumber("2222"), expectedNumber, gbp)
         )
       }
     }
 
     "PostAccount should" - {
       "post a new account into the Datastore" in new TestSuite {
-        testDataStore.postAccount(someAccount) === Right(Unit)
+        testDataStore.postAccount(someAccount).value shouldBe Right(())
       }
       "not post an account that already exists" in new TestSuite {
-        testDataStore.postAccount(someAccount) //Account is posted into Datastore
-        testDataStore.postAccount(someAccount).value == Left(AccountAlreadyExists)
+        testDataStore.postAccount(someAccount).value //Account is posted into Datastore
+        testDataStore.postAccount(someAccount).value shouldBe Left(AccountAlreadyExists)
       }
     }
 
@@ -58,18 +62,22 @@ class InMemoryEvalDataStoreUnitTest extends FreeSpec with Matchers with  Transfe
     val testDataStore: InMemoryEvalDataStore =
       new InMemoryEvalDataStore
 
-    val testAccount1 = CurrencyAccount(AccountNumber("1111"), CurrencyAmount(10.1), Currency.GBP)
-    val testAccount2 = CurrencyAccount(AccountNumber("2222"), CurrencyAmount(22.1), Currency.GBP)
-    val testAccount3 = CurrencyAccount(AccountNumber("3333"), CurrencyAmount(33.1), Currency.GBP)
-    val testAccount4 = CurrencyAccount(AccountNumber("4444"), CurrencyAmount(44.1), Currency.USD)
-    val testAccount5 = CurrencyAccount(AccountNumber("5555"), CurrencyAmount(55.1), Currency.EUR)
-    val testAccount6 = CurrencyAccount(AccountNumber("6666"), CurrencyAmount(66.1), Currency.USD)
+    private val gbp = Currency.getInstance("GBP")
+    private val usd = Currency.getInstance("USD")
+    private val eur = Currency.getInstance("EUR")
+
+    val testAccount1 = CurrencyAccount(AccountNumber("1111"), CurrencyAmount(10.1), gbp)
+    val testAccount2 = CurrencyAccount(AccountNumber("2222"), CurrencyAmount(22.1), gbp)
+    val testAccount3 = CurrencyAccount(AccountNumber("3333"), CurrencyAmount(33.1), gbp)
+    val testAccount4 = CurrencyAccount(AccountNumber("4444"), CurrencyAmount(44.1), usd)
+    val testAccount5 = CurrencyAccount(AccountNumber("5555"), CurrencyAmount(55.1), eur)
+    val testAccount6 = CurrencyAccount(AccountNumber("6666"), CurrencyAmount(66.1), usd)
 
 
     val someAccount =
-      CurrencyAccount(AccountNumber("SOME_ACCOUNT_NUMBER"), CurrencyAmount(192), Currency.EUR)
+      CurrencyAccount(AccountNumber("SOME_ACCOUNT_NUMBER"), CurrencyAmount(192), eur)
 
-    val nonExistingAccount = CurrencyAccount(AccountNumber("DUMMY_ACCOUNT"), CurrencyAmount(1.1), Currency.EUR)
+    val nonExistingAccount = CurrencyAccount(AccountNumber("DUMMY_ACCOUNT"), CurrencyAmount(1.1), eur)
 
     val accounts: Vector[CurrencyAccount] = Vector(
       testAccount1,
