@@ -9,7 +9,7 @@ import org.scalatest.matchers.should.Matchers
 import service.TransferServiceErrors
 import service.TransferServiceErrors._
 
-class InMemoryEvalDataStoreUnitTest extends AnyFreeSpec with Matchers{
+class InMemoryEvalDataStoreUnitTest extends AnyFreeSpec with Matchers {
 
   "InMemoryAccountDataStore" - {
     "ListAllAccounts should list accounts correctly" in new TestSuite {
@@ -26,7 +26,10 @@ class InMemoryEvalDataStoreUnitTest extends AnyFreeSpec with Matchers{
       }
 
       "return AccountDoesNotExist when a non existing account is requested" in new TestSuite {
-        testDataStore.getAccount(AccountNumber("SOME_DUMMY_ACCOUNT")).value.toString shouldBe Left(AccountDoesNotExist).toString
+        testDataStore
+          .getAccount(AccountNumber("SOME_DUMMY_ACCOUNT"))
+          .value
+          .toString shouldBe Left(AccountDoesNotExist).toString
       }
     }
 
@@ -37,9 +40,11 @@ class InMemoryEvalDataStoreUnitTest extends AnyFreeSpec with Matchers{
       "update the correct account" in new TestSuite {
         val expectedNumber = CurrencyAmount(4827.32)
         testDataStore.updateAccount(testAccount2.copy(balance = expectedNumber)).value
-        testDataStore.getAccount(AccountNumber("2222")).value shouldBe Right(
-          CurrencyAccount(AccountNumber("2222"), expectedNumber, testAccount2.currency)
-        )
+        testDataStore
+          .getAccount(AccountNumber("2222"))
+          .value shouldBe Right(
+            CurrencyAccount(AccountNumber("2222"), expectedNumber, testAccount2.currency)
+          )
       }
     }
 
@@ -121,7 +126,6 @@ class InMemoryEvalDataStoreUnitTest extends AnyFreeSpec with Matchers{
     val testAccount4 = CurrencyAccount(AccountNumber("4444"), CurrencyAmount(44.1), usd)
     val testAccount5 = CurrencyAccount(AccountNumber("5555"), CurrencyAmount(55.1), eur)
     val testAccount6 = CurrencyAccount(AccountNumber("6666"), CurrencyAmount(66.1), usd)
-
 
     val someAccount =
       CurrencyAccount(AccountNumber("SOME_ACCOUNT_NUMBER"), CurrencyAmount(192), eur)
