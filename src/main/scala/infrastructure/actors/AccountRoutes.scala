@@ -40,7 +40,8 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
 
   private val listAccountsEndpoint: PublicEndpoint[Unit, Unit, Seq[CurrencyAccount], Any] =
     endpoint.get
-      .in("api" / "accounts")
+      .in("api")
+      .in("accounts")
       .out(jsonBody[Seq[CurrencyAccount]])
       .summary("List all accounts")
       .description("Returns the complete list of currency accounts.")
@@ -48,7 +49,8 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
   private val createAccountEndpoint
       : PublicEndpoint[PostNewAccount, String, String, Any] =
     endpoint.post
-      .in("api" / "accounts")
+      .in("api")
+      .in("accounts")
       .in(jsonBody[PostNewAccount])
       .out(stringBody.description("Account created."))
       .errorOut(
@@ -60,7 +62,9 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
   private val transferEndpoint
       : PublicEndpoint[TransferBetweenAccounts, String, String, Any] =
     endpoint.put
-      .in("api" / "accounts" / "transfer")
+      .in("api")
+      .in("accounts")
+      .in("transfer")
       .in(jsonBody[TransferBetweenAccounts])
       .out(stringBody.description("Transfer processed."))
       .errorOut(
@@ -79,21 +83,23 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
   private val swaggerRoutes: Route = PekkoHttpServerInterpreter().toRoute(swaggerEndpoints)
 
   lazy val accountRoutes: Route = {
-    swaggerRoutes ~ pathPrefix("api" / "accounts" / "transfer") {
-      (pathEndOrSingleSlash & put) {
-        entity(as[TransferBetweenAccounts]) { transferRequest =>
-          complete((currencyAccountActor ? transferRequest).mapTo[HttpResponse])
-        }
-      }
-    } ~ pathPrefix("api" / "accounts") {
-      pathEndOrSingleSlash {
-        get {
-          val accounts = (currencyAccountActor ? GetAccounts).mapTo[Seq[CurrencyAccount]]
-          complete(accounts)
-        } ~ post {
-          entity(as[PostNewAccount]) { newAccount =>
-            val result = currencyAccountActor ? newAccount
-            complete(result.mapTo[HttpResponse])
+    swaggerRoutes ~ pathPrefix("api") {
+      pathPrefix("accounts") {
+        pathPrefix("transfer") {
+          (pathEndOrSingleSlash & put) {
+            entity(as[TransferBetweenAccounts]) { transferRequest =>
+              complete((currencyAccountActor ? transferRequest).mapTo[HttpResponse])
+            }
+          }
+        } ~ pathEndOrSingleSlash {
+          get {
+            val accounts = (currencyAccountActor ? GetAccounts).mapTo[Seq[CurrencyAccount]]
+            complete(accounts)
+          } ~ post {
+            entity(as[PostNewAccount]) { newAccount =>
+              val result = currencyAccountActor ? newAccount
+              complete(result.mapTo[HttpResponse])
+            }
           }
         }
       }
