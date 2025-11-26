@@ -62,7 +62,7 @@ class InMemoryEvalDataStoreUnitTest extends AnyFreeSpec with Matchers{
 
         val startLatch = new CountDownLatch(1)
         val releaseLatch = new CountDownLatch(1)
-        val delayMillis = 200
+        val delayMillis = 200L
 
         val transferFuture = Future {
           testDataStore
