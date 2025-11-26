@@ -2,7 +2,7 @@ package infrastructure
 
 import java.util.Currency
 
-import domain.model.{AccountNumber, CurrencyAccount, CurrencyAmount}
+import domain.model.{AccountNumber, AtomicTransferResult, CurrencyAccount, CurrencyAmount}
 import infrastructure.dataStores.InMemoryEvalDataStore
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -50,6 +50,55 @@ class InMemoryEvalDataStoreUnitTest extends AnyFreeSpec with Matchers{
       "not post an account that already exists" in new TestSuite {
         testDataStore.postAccount(someAccount).value //Account is posted into Datastore
         testDataStore.postAccount(someAccount).value shouldBe Left(AccountAlreadyExists)
+      }
+    }
+
+    "Atomic transfers should" - {
+      "block concurrent modifications to the same accounts" in new TestSuite {
+        import scala.concurrent.ExecutionContext.Implicits.global
+        import scala.concurrent.{Await, Future}
+        import scala.concurrent.duration.DurationInt
+        import java.util.concurrent.CountDownLatch
+
+        val startLatch = new CountDownLatch(1)
+        val releaseLatch = new CountDownLatch(1)
+        val delayMillis = 200
+
+        val transferFuture = Future {
+          testDataStore
+            .modifyAccountsAtomically(testAccount1.accountNumber, testAccount2.accountNumber) {
+              (from, to) =>
+                startLatch.countDown()
+                releaseLatch.await()
+                Right((from, to))
+            }
+            .value
+        }
+
+        startLatch.await() // ensure the transfer has acquired both locks
+
+        val updateFuture = Future {
+          val start = System.nanoTime()
+          val result = testDataStore.updateAccount(testAccount1).value
+          val elapsedMs = (System.nanoTime() - start) / 1000000
+          (result, elapsedMs)
+        }
+
+        Thread.sleep(delayMillis.toLong)
+        releaseLatch.countDown()
+
+        val (updateResult, elapsedMs) = Await.result(updateFuture, 2.seconds)
+        Await.result(transferFuture, 2.seconds) shouldBe Right(
+          AtomicTransferResult(
+            testAccount1,
+            testAccount2,
+            testAccount1,
+            testAccount2
+          )
+        )
+
+        updateResult shouldBe Right(())
+        elapsedMs should be >= delayMillis
       }
     }
 

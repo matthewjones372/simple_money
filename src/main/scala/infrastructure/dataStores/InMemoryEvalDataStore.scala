@@ -30,18 +30,22 @@ class InMemoryEvalDataStore extends AccountGatewayAlg[Eval] {
 
   override def updateAccount(account: CurrencyAccount): Eval[Either[TransferServiceErrors, Unit]] =
     Eval.now {
-      currencyAccounts.put(account.accountNumber.value, account) match {
-        case Some(_) => Right(())
-        case None    => Left(FailedToUpdateAccount)
+      withAccountLock(account.accountNumber) {
+        currencyAccounts.put(account.accountNumber.value, account) match {
+          case Some(_) => Right(())
+          case None    => Left(FailedToUpdateAccount)
+        }
       }
     }
 
   override def postAccount(account: CurrencyAccount): Eval[Either[TransferServiceErrors, Unit]] =
     Eval.now {
-      if (currencyAccounts.isDefinedAt(account.accountNumber.value)) {
-        Left(AccountAlreadyExists)
-      } else {
-        Right(currencyAccounts.update(account.accountNumber.value, account))
+      withAccountLock(account.accountNumber) {
+        if (currencyAccounts.isDefinedAt(account.accountNumber.value)) {
+          Left(AccountAlreadyExists)
+        } else {
+          Right(currencyAccounts.update(account.accountNumber.value, account))
+        }
       }
     }
 
@@ -52,7 +56,10 @@ class InMemoryEvalDataStore extends AccountGatewayAlg[Eval] {
       update: (CurrencyAccount, CurrencyAccount) => Either[TransferServiceErrors, (CurrencyAccount, CurrencyAccount)]
   ): Eval[Either[TransferServiceErrors, AtomicTransferResult]] =
     Eval.now {
-      lock.lock()
+      val (firstLock, secondLock) = orderedLocks(fromAccountNumber, toAccountNumber)
+
+      firstLock.lock()
+      secondLock.lock()
       try {
         for {
           fromAccount <- currencyAccounts
@@ -69,11 +76,34 @@ class InMemoryEvalDataStore extends AccountGatewayAlg[Eval] {
           AtomicTransferResult(fromAccount, toAccount, updatedFrom, updatedTo)
         }
       } finally {
-        lock.unlock()
+        secondLock.unlock()
+        firstLock.unlock()
       }
     }
 
-  private val lock = new ReentrantLock()
+  private def orderedLocks(
+      fromAccountNumber: AccountNumber,
+      toAccountNumber: AccountNumber
+  ): (ReentrantLock, ReentrantLock) = {
+    if (fromAccountNumber.value.compareTo(toAccountNumber.value) <= 0) {
+      (lockFor(fromAccountNumber), lockFor(toAccountNumber))
+    } else {
+      (lockFor(toAccountNumber), lockFor(fromAccountNumber))
+    }
+  }
+
+  private def withAccountLock[A](accountNumber: AccountNumber)(f: => Either[TransferServiceErrors, A]) = {
+    val lock = lockFor(accountNumber)
+    lock.lock()
+    try f
+    finally lock.unlock()
+  }
+
+  private def lockFor(accountNumber: AccountNumber): ReentrantLock =
+    accountLocks.getOrElseUpdate(accountNumber.value, new ReentrantLock())
+
+  private val accountLocks: concurrent.Map[String, ReentrantLock] =
+    new ConcurrentHashMap[String, ReentrantLock]().asScala
   private val currencyAccounts: concurrent.Map[String, CurrencyAccount] =
     new ConcurrentHashMap[String, CurrencyAccount]().asScala
 }
