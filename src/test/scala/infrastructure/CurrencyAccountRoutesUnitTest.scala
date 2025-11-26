@@ -17,6 +17,7 @@ import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import service.AccountTransferService
+import scala.concurrent.duration._
 
 class CurrencyAccountRoutesUnitTest
     extends AnyFreeSpec
@@ -49,6 +50,7 @@ class CurrencyAccountRoutesUnitTest
     system.actorOf(AccountActor.props(transferService), "currencyAccounts")
 
   lazy val routes: Route = accountRoutes
+  private val sealedRoutes: Route = Route.seal(routes)
 
   "CurrencyAccountRoutes" - {
     "(GET :/api/accounts) should" - {
@@ -121,6 +123,19 @@ class CurrencyAccountRoutesUnitTest
           contentType shouldBe ContentTypes.`application/json`
         }
 
+      }
+    }
+
+    "Swagger docs" - {
+      "expose the customised server URL in the OpenAPI YAML" in {
+        val request = Get("/docs/docs.yaml")
+
+        request ~> sealedRoutes ~> check {
+          status shouldBe StatusCodes.OK
+          contentType.mediaType.value shouldBe "application/yaml"
+          val yaml = responseEntity.toStrict(1.second).futureValue.data.utf8String
+          yaml should include("http://localhost:8081")
+        }
       }
     }
   }
