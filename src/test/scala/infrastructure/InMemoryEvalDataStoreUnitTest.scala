@@ -32,13 +32,13 @@ class InMemoryEvalDataStoreUnitTest extends AnyFreeSpec with Matchers{
 
     "UpdateAccount should" - {
       "only update an existing account" in new TestSuite {
-        testDataStore.updateAccount(nonExistingAccount).value == Left(FailedToUpdateAccount)
+        testDataStore.updateAccount(nonExistingAccount).value shouldBe Left(FailedToUpdateAccount)
       }
       "update the correct account" in new TestSuite {
         val expectedNumber = CurrencyAmount(4827.32)
-        testDataStore.updateAccount(testAccount2.copy(balance = expectedNumber))
+        testDataStore.updateAccount(testAccount2.copy(balance = expectedNumber)).value
         testDataStore.getAccount(AccountNumber("2222")).value shouldBe Right(
-          CurrencyAccount(AccountNumber("2222"), expectedNumber, gbp)
+          CurrencyAccount(AccountNumber("2222"), expectedNumber, testAccount2.currency)
         )
       }
     }
