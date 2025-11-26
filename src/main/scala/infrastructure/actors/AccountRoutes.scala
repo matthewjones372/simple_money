@@ -14,6 +14,7 @@ import domain.model.CurrencyAccount
 import infrastructure.actors.AccountActor._
 import infrastructure.actors.CirceSupport
 import sttp.model.StatusCode
+import sttp.apispec.openapi.Server
 import sttp.tapir._
 import sttp.tapir.stringToPath
 import sttp.tapir.generic.auto._
@@ -76,7 +77,7 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
       .description("Transfers funds from one account to another, returning any validation errors.")
 
   private lazy val swaggerEndpoints = SwaggerInterpreter(
-    serverUrls = List("http://localhost:8081")
+    customiseDocsModel = _.servers(List(Server("http://localhost:8081")))
   ).fromEndpoints[Future](
     List(listAccountsEndpoint, createAccountEndpoint, transferEndpoint),
     "Simple Money API",
