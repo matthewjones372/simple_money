@@ -13,9 +13,9 @@ trait AccountGatewayAlg[F[_]] {
   def postAccount(account: CurrencyAccount): F[Either[TransferServiceErrors, Unit]]
 
   def modifyAccountsAtomically(
-      fromAccountNumber: AccountNumber,
-      toAccountNumber: AccountNumber
+    fromAccountNumber: AccountNumber,
+    toAccountNumber: AccountNumber
   )(
-      update: (CurrencyAccount, CurrencyAccount) => Either[TransferServiceErrors, (CurrencyAccount, CurrencyAccount)]
+    update: (CurrencyAccount, CurrencyAccount) => Either[TransferServiceErrors, (CurrencyAccount, CurrencyAccount)]
   ): F[Either[TransferServiceErrors, AtomicTransferResult]]
 }

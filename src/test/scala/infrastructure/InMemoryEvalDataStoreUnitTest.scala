@@ -43,8 +43,8 @@ class InMemoryEvalDataStoreUnitTest extends AnyFreeSpec with Matchers {
         testDataStore
           .getAccount(AccountNumber("2222"))
           .value shouldBe Right(
-            CurrencyAccount(AccountNumber("2222"), expectedNumber, testAccount2.currency)
-          )
+          CurrencyAccount(AccountNumber("2222"), expectedNumber, testAccount2.currency)
+        )
       }
     }
 
@@ -65,17 +65,16 @@ class InMemoryEvalDataStoreUnitTest extends AnyFreeSpec with Matchers {
         import scala.concurrent.duration.DurationInt
         import java.util.concurrent.CountDownLatch
 
-        val startLatch = new CountDownLatch(1)
+        val startLatch   = new CountDownLatch(1)
         val releaseLatch = new CountDownLatch(1)
-        val delayMillis = 200L
+        val delayMillis  = 200L
 
         val transferFuture = Future {
           testDataStore
-            .modifyAccountsAtomically(testAccount1.accountNumber, testAccount2.accountNumber) {
-              (from, to) =>
-                startLatch.countDown()
-                releaseLatch.await()
-                Right((from, to))
+            .modifyAccountsAtomically(testAccount1.accountNumber, testAccount2.accountNumber) { (from, to) =>
+              startLatch.countDown()
+              releaseLatch.await()
+              Right((from, to))
             }
             .value
         }
@@ -83,8 +82,8 @@ class InMemoryEvalDataStoreUnitTest extends AnyFreeSpec with Matchers {
         startLatch.await() // ensure the transfer has acquired both locks
 
         val updateFuture = Future {
-          val start = System.nanoTime()
-          val result = testDataStore.updateAccount(testAccount1).value
+          val start     = System.nanoTime()
+          val result    = testDataStore.updateAccount(testAccount1).value
           val elapsedMs = (System.nanoTime() - start) / 1000000
           (result, elapsedMs)
         }

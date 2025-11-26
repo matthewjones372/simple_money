@@ -19,7 +19,7 @@ class InMemoryEvalDataStore extends AccountGatewayAlg[Eval] {
   }
 
   override def getAccount(
-      accountNumber: AccountNumber
+    accountNumber: AccountNumber
   ): Eval[Either[TransferServiceErrors, CurrencyAccount]] =
     Eval.now {
       currencyAccounts
@@ -50,10 +50,10 @@ class InMemoryEvalDataStore extends AccountGatewayAlg[Eval] {
     }
 
   override def modifyAccountsAtomically(
-      fromAccountNumber: AccountNumber,
-      toAccountNumber: AccountNumber
+    fromAccountNumber: AccountNumber,
+    toAccountNumber: AccountNumber
   )(
-      update: (CurrencyAccount, CurrencyAccount) => Either[TransferServiceErrors, (CurrencyAccount, CurrencyAccount)]
+    update: (CurrencyAccount, CurrencyAccount) => Either[TransferServiceErrors, (CurrencyAccount, CurrencyAccount)]
   ): Eval[Either[TransferServiceErrors, AtomicTransferResult]] =
     Eval.now {
       val (firstLock, secondLock) = orderedLocks(fromAccountNumber, toAccountNumber)
@@ -63,11 +63,11 @@ class InMemoryEvalDataStore extends AccountGatewayAlg[Eval] {
       try {
         for {
           fromAccount <- currencyAccounts
-            .get(fromAccountNumber.value)
-            .toRight(AccountDoesNotExist)
+                           .get(fromAccountNumber.value)
+                           .toRight(AccountDoesNotExist)
           toAccount <- currencyAccounts
-            .get(toAccountNumber.value)
-            .toRight(AccountDoesNotExist)
+                         .get(toAccountNumber.value)
+                         .toRight(AccountDoesNotExist)
           updated <- update(fromAccount, toAccount)
         } yield {
           val (updatedFrom, updatedTo) = updated
@@ -82,15 +82,14 @@ class InMemoryEvalDataStore extends AccountGatewayAlg[Eval] {
     }
 
   private def orderedLocks(
-      fromAccountNumber: AccountNumber,
-      toAccountNumber: AccountNumber
-  ): (ReentrantLock, ReentrantLock) = {
+    fromAccountNumber: AccountNumber,
+    toAccountNumber: AccountNumber
+  ): (ReentrantLock, ReentrantLock) =
     if (fromAccountNumber.value.compareTo(toAccountNumber.value) <= 0) {
       (lockFor(fromAccountNumber), lockFor(toAccountNumber))
     } else {
       (lockFor(toAccountNumber), lockFor(fromAccountNumber))
     }
-  }
 
   private def withAccountLock[A](accountNumber: AccountNumber)(f: => Either[TransferServiceErrors, A]) = {
     val lock = lockFor(accountNumber)

@@ -17,7 +17,6 @@ class AccountActor(transferService: AccountTransferService[Eval]) extends Actor 
 
   implicit lazy val timeout: Timeout = Timeout(5.seconds) // TODO: Load in from config file
 
-
   override def receive: PartialFunction[Any, Unit] = {
 
     case GetAccounts =>
@@ -25,28 +24,47 @@ class AccountActor(transferService: AccountTransferService[Eval]) extends Actor 
 
     case PostNewAccount(accountNumber, balance, currency) =>
       val response = transferService.addNewAccount(
-        CurrencyAccount(AccountNumber.fromString(accountNumber),
-          CurrencyAmount.fromBigDecimal(balance),
-          currency)
+        CurrencyAccount(AccountNumber.fromString(accountNumber), CurrencyAmount.fromBigDecimal(balance), currency)
       ) map {
         case Right(_) =>
-          HttpResponse(entity = HttpEntity(ContentTypes.`application/json`, s"Successfully added $accountNumber into the datastore"))
+          HttpResponse(entity =
+            HttpEntity(ContentTypes.`application/json`, s"Successfully added $accountNumber into the datastore")
+          )
         case Left(err) =>
-          HttpResponse(BadRequest, entity=HttpEntity(ContentTypes.`application/json`, s"Could not add $accountNumber into the data store reason: $err"))
+          HttpResponse(
+            BadRequest,
+            entity = HttpEntity(
+              ContentTypes.`application/json`,
+              s"Could not add $accountNumber into the data store reason: $err"
+            )
+          )
       }
       sender() ! response.value
 
     case TransferBetweenAccounts(fromAccountNumber, toAccountNumber, amount) =>
-      val response: Eval[HttpResponse] = transferService.accountTransfer(
-        AccountNumber.fromString(fromAccountNumber),
-        AccountNumber.fromString(toAccountNumber),
-        CurrencyAmount.fromBigDecimal(amount)).map{
-        case Right(_) =>
-          HttpResponse(entity = HttpEntity(ContentTypes.`application/json`, s"$amount has been transferred from $fromAccountNumber to $toAccountNumber"))
-        case Left(err) =>
-          HttpResponse(BadRequest, entity = HttpEntity(ContentTypes.`application/json`,
-            s"Transfer unsuccessful from account $fromAccountNumber to $toAccountNumber error: ${err.toString}"))
-      }
+      val response: Eval[HttpResponse] = transferService
+        .accountTransfer(
+          AccountNumber.fromString(fromAccountNumber),
+          AccountNumber.fromString(toAccountNumber),
+          CurrencyAmount.fromBigDecimal(amount)
+        )
+        .map {
+          case Right(_) =>
+            HttpResponse(entity =
+              HttpEntity(
+                ContentTypes.`application/json`,
+                s"$amount has been transferred from $fromAccountNumber to $toAccountNumber"
+              )
+            )
+          case Left(err) =>
+            HttpResponse(
+              BadRequest,
+              entity = HttpEntity(
+                ContentTypes.`application/json`,
+                s"Transfer unsuccessful from account $fromAccountNumber to $toAccountNumber error: ${err.toString}"
+              )
+            )
+        }
 
       sender() ! response.value
   }
@@ -60,9 +78,7 @@ object AccountActor {
 
   case class GetCurrencyAccount(accountNumber: String)
 
-  case class TransferBetweenAccounts(fromAccountNumber: String,
-                                     toAccountNumber: String,
-                                     amount: BigDecimal)
+  case class TransferBetweenAccounts(fromAccountNumber: String, toAccountNumber: String, amount: BigDecimal)
 
   def props(transferService: AccountTransferService[Eval]): Props =
     Props(new AccountActor(transferService))
