@@ -75,14 +75,14 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
       .summary("Transfer funds between accounts")
       .description("Transfers funds from one account to another, returning any validation errors.")
 
-  private val swaggerEndpoints = SwaggerInterpreter()
+  private lazy val swaggerEndpoints = SwaggerInterpreter()
     .fromEndpoints[Future](
       List(listAccountsEndpoint, createAccountEndpoint, transferEndpoint),
       "Simple Money API",
       "1.0.0"
     )
 
-  private val swaggerRoutes: Route = PekkoHttpServerInterpreter().toRoute(swaggerEndpoints)
+  private lazy val swaggerRoutes: Route = PekkoHttpServerInterpreter().toRoute(swaggerEndpoints)
 
   lazy val accountRoutes: Route = {
     swaggerRoutes ~ pathPrefix("api") {
