@@ -56,7 +56,6 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
       .errorOut(
         statusCode(StatusCode.BadRequest)
           .and(stringBody.description("Account already exists."))
-          .map[String](_._2)(msg => ((), msg))
       )
       .summary("Create a new account")
       .description("Creates a new account with the provided initial balance and currency.")
@@ -72,7 +71,6 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
       .errorOut(
         statusCode(StatusCode.BadRequest)
           .and(stringBody.description("Transfer failed."))
-          .map[String](_._2)(msg => ((), msg))
       )
       .summary("Transfer funds between accounts")
       .description("Transfers funds from one account to another, returning any validation errors.")

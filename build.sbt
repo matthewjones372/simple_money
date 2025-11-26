@@ -27,6 +27,7 @@ lazy val root = (project in file(".")).settings(
     "org.typelevel" %% "cats-core" % catsVersion,
     "ch.qos.logback" % "logback-classic" % logbackVersion,
     "com.typesafe.scala-logging" %% "scala-logging" % scalaLoggingVersion,
+    "org.apache.pekko" %% "pekko-slf4j" % pekkoVersion,
     "org.apache.pekko" %% "pekko-testkit" % pekkoVersion % Test,
     "org.apache.pekko" %% "pekko-http-testkit" % pekkoHttpVersion % Test,
     "org.scalatest" %% "scalatest" % scalaTestVersion % Test
