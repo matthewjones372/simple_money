@@ -1,41 +1,44 @@
 package infrastructure
 
-import akka.actor.ActorRef
-import akka.http.scaladsl.marshalling.Marshal
-import akka.http.scaladsl.model._
-import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.testkit.ScalatestRouteTest
+import java.util.Currency
+
+import org.apache.pekko.actor.ActorRef
+import org.apache.pekko.http.scaladsl.marshalling.Marshal
+import org.apache.pekko.http.scaladsl.model._
+import org.apache.pekko.http.scaladsl.server.Route
+import org.apache.pekko.http.scaladsl.testkit.ScalatestRouteTest
 import cats.Eval
-import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
-import domain.model.{AccountNumber, Currency, CurrencyAccount, CurrencyAmount}
+import domain.model.{AccountNumber, CurrencyAccount, CurrencyAmount}
 import infrastructure.actors.AccountActor.{PostNewAccount, TransferBetweenAccounts}
 import infrastructure.actors.{AccountActor, AccountRoutes}
 import infrastructure.dataStores.InMemoryEvalDataStore
 import infrastructure.loggers.EvalLogger
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{FreeSpec, Matchers}
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 import service.AccountTransferService
 
 class CurrencyAccountRoutesUnitTest
-    extends FreeSpec
+    extends AnyFreeSpec
     with Matchers
     with ScalaFutures
     with ScalatestRouteTest
-    with AccountRoutes
-    with FailFastCirceSupport {
+    with AccountRoutes {
+
+  private val gbp: Currency = Currency.getInstance("GBP")
 
   val accounts: Seq[CurrencyAccount] = Vector(
-    CurrencyAccount(AccountNumber("Account1"), CurrencyAmount(100), Currency.GBP),
-    CurrencyAccount(AccountNumber("Account2"), CurrencyAmount(250), Currency.GBP),
-    CurrencyAccount(AccountNumber("Account3"), CurrencyAmount(5637), Currency.GBP),
-    CurrencyAccount(AccountNumber("Account4"), CurrencyAmount(573.53), Currency.GBP),
-    CurrencyAccount(AccountNumber("Account5"), CurrencyAmount(250), Currency.GBP),
+    CurrencyAccount(AccountNumber("Account1"), CurrencyAmount(100), gbp),
+    CurrencyAccount(AccountNumber("Account2"), CurrencyAmount(250), gbp),
+    CurrencyAccount(AccountNumber("Account3"), CurrencyAmount(5637), gbp),
+    CurrencyAccount(AccountNumber("Account4"), CurrencyAmount(573.53), gbp),
+    CurrencyAccount(AccountNumber("Account5"), CurrencyAmount(250), gbp),
   )
 
   val dataStore: InMemoryEvalDataStore =
     new InMemoryEvalDataStore
 
-  accounts.foreach(dataStore.postAccount)
+  accounts.foreach(account => dataStore.postAccount(account).value)
 
   val logger: EvalLogger = new EvalLogger
 
@@ -57,10 +60,10 @@ class CurrencyAccountRoutesUnitTest
           contentType shouldBe ContentTypes.`application/json`
 
           responseAs[Seq[CurrencyAccount]] should contain(
-            CurrencyAccount(AccountNumber("Account1"), CurrencyAmount(100.0), Currency.GBP)
+            CurrencyAccount(AccountNumber("Account1"), CurrencyAmount(100.0), gbp)
           )
           responseAs[Seq[CurrencyAccount]] should contain(
-            CurrencyAccount(AccountNumber("Account5"), CurrencyAmount(250.0), Currency.GBP)
+            CurrencyAccount(AccountNumber("Account5"), CurrencyAmount(250.0), gbp)
           )
         }
       }
@@ -71,7 +74,7 @@ class CurrencyAccountRoutesUnitTest
         val newAccountPost = PostNewAccount(
           "SOME_ACCOUNT_NUMBER",
           BigDecimal(50.0),
-          Currency.GBP
+          gbp
         )
 
         val eventualEntity = Marshal(newAccountPost).to[MessageEntity]
@@ -101,9 +104,7 @@ class CurrencyAccountRoutesUnitTest
         request ~> routes ~> check {
           status shouldBe StatusCodes.OK
           contentType shouldBe ContentTypes.`application/json`
-          responseAs[HttpResponse] shouldBe HttpResponse(
-            entity=HttpEntity(ContentTypes.`application/json`, "40 has been transferred from Account1 to Account2")
-          )
+          responseAs[String] shouldBe "40 has been transferred from Account1 to Account2"
         }
 
       }

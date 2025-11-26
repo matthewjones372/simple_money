@@ -1,11 +1,11 @@
 package apps
 
-import akka.actor.{ ActorRef, ActorSystem }
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.server.Route
-import akka.stream.ActorMaterializer
+import org.apache.pekko.actor.{ActorRef, ActorSystem}
+import org.apache.pekko.http.scaladsl.Http
+import org.apache.pekko.http.scaladsl.server.Route
+import org.apache.pekko.stream.{Materializer, SystemMaterializer}
 import cats.Eval
-import infrastructure.actors.{ AccountActor, AccountRoutes }
+import infrastructure.actors.{AccountActor, AccountRoutes}
 import infrastructure.dataStores.InMemoryEvalDataStore
 import infrastructure.loggers.EvalLogger
 import service.AccountTransferService
@@ -17,8 +17,10 @@ object QuickStartDemoServer extends App with AccountRoutes {
   implicit val system: ActorSystem =
     ActorSystem("currencyAccountServer")
 
-  implicit val materializer: ActorMaterializer =
-    ActorMaterializer()
+  implicit val materializer: Materializer =
+    SystemMaterializer(system).materializer
+
+  override implicit def executionContext: scala.concurrent.ExecutionContext = system.dispatcher
 
   lazy val dataStore: InMemoryEvalDataStore =
     new InMemoryEvalDataStore
@@ -35,7 +37,7 @@ object QuickStartDemoServer extends App with AccountRoutes {
   val port: Int     = 8081 // TODO: Load in from config file
   val host: String  = "0.0.0.0"
 
-  Http().bindAndHandle(routes, host, port)
+  Http().newServerAt(host, port).bindFlow(routes)
 
   logger.info(s"Server online at http://$host:$port/")
   Await.result(system.whenTerminated, Duration.Inf)

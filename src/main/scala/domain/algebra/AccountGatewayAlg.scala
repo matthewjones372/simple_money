@@ -1,10 +1,8 @@
 package domain.algebra
-import domain.model.{AccountNumber, CurrencyAccount}
+import domain.model.{AccountNumber, AtomicTransferResult, CurrencyAccount}
 import service.TransferServiceErrors
 
-import scala.language.higherKinds
-
-trait AccountGatewayAlg[F[_]] extends TransferServiceErrors {
+trait AccountGatewayAlg[F[_]] {
 
   def getAllAccounts: F[Seq[CurrencyAccount]]
 
@@ -13,4 +11,11 @@ trait AccountGatewayAlg[F[_]] extends TransferServiceErrors {
   def updateAccount(account: CurrencyAccount): F[Either[TransferServiceErrors, Unit]]
 
   def postAccount(account: CurrencyAccount): F[Either[TransferServiceErrors, Unit]]
+
+  def modifyAccountsAtomically(
+      fromAccountNumber: AccountNumber,
+      toAccountNumber: AccountNumber
+  )(
+      update: (CurrencyAccount, CurrencyAccount) => Either[TransferServiceErrors, (CurrencyAccount, CurrencyAccount)]
+  ): F[Either[TransferServiceErrors, AtomicTransferResult]]
 }

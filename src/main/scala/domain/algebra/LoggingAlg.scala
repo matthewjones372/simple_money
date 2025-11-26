@@ -1,7 +1,5 @@
 package domain.algebra
 
-import scala.language.higherKinds
-
 trait LoggingAlg[F[_]] {
 
   def info(msg: String): F[Unit]

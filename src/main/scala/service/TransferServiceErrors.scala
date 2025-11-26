@@ -1,7 +1,8 @@
 package service
 
-trait TransferServiceErrors {
+sealed trait TransferServiceErrors
 
+object TransferServiceErrors {
   case object AccountDoesNotExist extends TransferServiceErrors
 
   case object AccountHasInsufficientFunds extends TransferServiceErrors
@@ -15,5 +16,4 @@ trait TransferServiceErrors {
   case object CannotTransferToAccountWithDifferentCurrency extends TransferServiceErrors
 
   case object CannotTransferNegativeAmount extends TransferServiceErrors
-
 }
