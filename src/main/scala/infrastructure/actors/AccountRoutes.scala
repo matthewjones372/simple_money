@@ -14,6 +14,7 @@ import infrastructure.actors.AccountActor._
 import infrastructure.actors.CirceSupport
 import sttp.model.StatusCode
 import sttp.tapir._
+import sttp.tapir.stringToPath
 import sttp.tapir.generic.auto._
 import sttp.tapir.json.circe._
 import sttp.tapir.server.pekkohttp.PekkoHttpServerInterpreter
@@ -22,6 +23,7 @@ import sttp.tapir.swagger.bundle.SwaggerInterpreter
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.concurrent.Future
+import scala.language.implicitConversions
 
 trait AccountRoutes extends CirceSupport with JsonCodecs {
 
