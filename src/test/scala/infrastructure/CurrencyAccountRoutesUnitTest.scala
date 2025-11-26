@@ -32,7 +32,7 @@ class CurrencyAccountRoutesUnitTest
     CurrencyAccount(AccountNumber("Account2"), CurrencyAmount(250), gbp),
     CurrencyAccount(AccountNumber("Account3"), CurrencyAmount(5637), gbp),
     CurrencyAccount(AccountNumber("Account4"), CurrencyAmount(573.53), gbp),
-    CurrencyAccount(AccountNumber("Account5"), CurrencyAmount(250), gbp),
+    CurrencyAccount(AccountNumber("Account5"), CurrencyAmount(250), gbp)
   )
 
   val dataStore: InMemoryEvalDataStore =
@@ -100,7 +100,6 @@ class CurrencyAccountRoutesUnitTest
 
         val request = Put("/api/accounts/transfer").withEntity(transferEntity)
 
-
         request ~> routes ~> check {
           status shouldBe StatusCodes.OK
           contentType shouldBe ContentTypes.`application/json`
@@ -109,10 +108,7 @@ class CurrencyAccountRoutesUnitTest
 
       }
       "return an error when attempting to transfer from a non-existing account" in {
-        val
-        transferRequest= TransferBetweenAccounts("NON_EXISTING",
-          "Account2", 40
-        )
+        val transferRequest = TransferBetweenAccounts("NON_EXISTING", "Account2", 40)
 
         val eventualEntity = Marshal(transferRequest).to[MessageEntity]
 

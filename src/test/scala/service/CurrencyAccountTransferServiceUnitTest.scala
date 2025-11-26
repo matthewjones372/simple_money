@@ -70,7 +70,11 @@ class CurrencyAccountTransferServiceUnitTest extends AnyFreeSpec with Matchers {
         "not transfer funds when an account does not exist" in new TestSuite {
           val nonExistingAccount = AccountNumber("SOME_NON_EXISTING_ACCOUNT")
           val gatewayError: TransferServiceErrors =
-            transferService.accountTransfer(nonExistingAccount, accountWithGBP, CurrencyAmount(2)).get.swap.getOrElse(fail("Expected transfer failure"))
+            transferService
+              .accountTransfer(nonExistingAccount, accountWithGBP, CurrencyAmount(2))
+              .get
+              .swap
+              .getOrElse(fail("Expected transfer failure"))
 
           gatewayError.toString shouldBe AccountDoesNotExist.toString
         }
@@ -78,7 +82,8 @@ class CurrencyAccountTransferServiceUnitTest extends AnyFreeSpec with Matchers {
         "not transfer funds when a negative transfer is requested" in new TestSuite {
 
           val gatewayError: TransferServiceErrors =
-            transferService.accountTransfer(accountWithGBP, accountWithPositiveFunds, CurrencyAmount(-100))
+            transferService
+              .accountTransfer(accountWithGBP, accountWithPositiveFunds, CurrencyAmount(-100))
               .get
               .swap
               .getOrElse(fail("Expected transfer failure"))
@@ -105,7 +110,9 @@ class CurrencyAccountTransferServiceUnitTest extends AnyFreeSpec with Matchers {
 
           gateway.getAccount(accountWithNegativeFunds).get.toOption.get.balance shouldBe CurrencyAmount(-19.99)
           gateway.getAccount(accountWithPositiveFunds).get.toOption.get.balance shouldBe CurrencyAmount(100)
-          result.swap.getOrElse(fail("Expected transfer failure")).toString shouldBe AccountHasInsufficientFunds.toString
+          result.swap
+            .getOrElse(fail("Expected transfer failure"))
+            .toString shouldBe AccountHasInsufficientFunds.toString
         }
 
         "not be able to transfer between the same account" in new TestSuite {
@@ -113,7 +120,9 @@ class CurrencyAccountTransferServiceUnitTest extends AnyFreeSpec with Matchers {
             .accountTransfer(accountWithPositiveFunds, accountWithPositiveFunds, CurrencyAmount(30))
             .get
 
-          result.swap.getOrElse(fail("Expected transfer failure")).toString shouldBe CannotTransferToSameAccount.toString
+          result.swap
+            .getOrElse(fail("Expected transfer failure"))
+            .toString shouldBe CannotTransferToSameAccount.toString
           gateway.getAccount(accountWithPositiveFunds).get.toOption.get.balance shouldBe CurrencyAmount(100)
         }
 
@@ -121,7 +130,9 @@ class CurrencyAccountTransferServiceUnitTest extends AnyFreeSpec with Matchers {
           val result: Either[TransferServiceErrors, Unit] =
             transferService.accountTransfer(accountWithGBP, accountWithEur, CurrencyAmount(30)).get
 
-          result.swap.getOrElse(fail("Expected transfer failure")).toString shouldBe CannotTransferToAccountWithDifferentCurrency.toString
+          result.swap
+            .getOrElse(fail("Expected transfer failure"))
+            .toString shouldBe CannotTransferToAccountWithDifferentCurrency.toString
         }
       }
     }
@@ -130,10 +141,10 @@ class CurrencyAccountTransferServiceUnitTest extends AnyFreeSpec with Matchers {
   "TransferService with atomic datastore" - {
     "complete concurrent transfers without losing funds" in {
       implicit val ec: ExecutionContext = ExecutionContext.global
-      val gateway = new infrastructure.dataStores.InMemoryEvalDataStore
+      val gateway                       = new infrastructure.dataStores.InMemoryEvalDataStore
       val logger = new LoggingAlg[Try] {
-        override def info(msg: String): Try[Unit] = Success(())
-        override def warn(msg: String): Try[Unit] = Success(())
+        override def info(msg: String): Try[Unit]                 = Success(())
+        override def warn(msg: String): Try[Unit]                 = Success(())
         override def error(msg: String, ex: Throwable): Try[Unit] = Success(())
       }
       val transferService = new AccountTransferService[EvalWrapper](
@@ -142,7 +153,7 @@ class CurrencyAccountTransferServiceUnitTest extends AnyFreeSpec with Matchers {
       )
 
       val fromAccount = AccountNumber("CONCURRENT_FROM")
-      val toAccount = AccountNumber("CONCURRENT_TO")
+      val toAccount   = AccountNumber("CONCURRENT_TO")
 
       val gbp = Currency.getInstance("GBP")
       gateway.postAccount(CurrencyAccount(fromAccount, CurrencyAmount(500), gbp)).value
@@ -211,24 +222,26 @@ class CurrencyAccountTransferServiceUnitTest extends AnyFreeSpec with Matchers {
         override def getAccount(accountNumber: AccountNumber): Try[Either[TransferServiceErrors, CurrencyAccount]] =
           Success(accounts.get(accountNumber.value).map(Right(_)).getOrElse(Left(AccountDoesNotExist)))
 
-        override def updateAccount(account: CurrencyAccount): Try[Either[TransferServiceErrors, Unit]] = {
+        override def updateAccount(account: CurrencyAccount): Try[Either[TransferServiceErrors, Unit]] =
           Success(Right(accounts.update(account.accountNumber.value, account)))
-        }
 
         override def postAccount(account: CurrencyAccount): Try[Either[TransferServiceErrors, Unit]] =
           Success(Right(accounts.update(account.accountNumber.value, account)))
 
         override def modifyAccountsAtomically(
-            fromAccountNumber: AccountNumber,
-            toAccountNumber: AccountNumber
+          fromAccountNumber: AccountNumber,
+          toAccountNumber: AccountNumber
         )(
-            update: (CurrencyAccount, CurrencyAccount) => Either[TransferServiceErrors, (CurrencyAccount, CurrencyAccount)]
+          update: (
+            CurrencyAccount,
+            CurrencyAccount
+          ) => Either[TransferServiceErrors, (CurrencyAccount, CurrencyAccount)]
         ): Try[Either[TransferServiceErrors, domain.model.AtomicTransferResult]] =
           Success {
             for {
               fromAccount <- accounts.get(fromAccountNumber.value).toRight(AccountDoesNotExist)
-              toAccount <- accounts.get(toAccountNumber.value).toRight(AccountDoesNotExist)
-              updated <- update(fromAccount, toAccount)
+              toAccount   <- accounts.get(toAccountNumber.value).toRight(AccountDoesNotExist)
+              updated     <- update(fromAccount, toAccount)
             } yield {
               val (updatedFrom, updatedTo) = updated
               accounts.update(fromAccountNumber.value, updatedFrom)
@@ -243,7 +256,7 @@ class CurrencyAccountTransferServiceUnitTest extends AnyFreeSpec with Matchers {
   private final class EvalWrapper[A](val value: A)
   private object EvalWrapper {
     given cats.Monad[EvalWrapper] with
-      override def pure[A](x: A): EvalWrapper[A] = new EvalWrapper(x)
+      override def pure[A](x: A): EvalWrapper[A]                                             = new EvalWrapper(x)
       override def flatMap[A, B](fa: EvalWrapper[A])(f: A => EvalWrapper[B]): EvalWrapper[B] = f(fa.value)
       override def tailRecM[A, B](a: A)(f: A => EvalWrapper[Either[A, B]]): EvalWrapper[B] =
         f(a).value match {
@@ -262,17 +275,17 @@ class CurrencyAccountTransferServiceUnitTest extends AnyFreeSpec with Matchers {
     override def postAccount(account: CurrencyAccount): EvalWrapper[Either[TransferServiceErrors, Unit]] =
       EvalWrapper(delegate.postAccount(account).value)
     override def modifyAccountsAtomically(
-        fromAccountNumber: AccountNumber,
-        toAccountNumber: AccountNumber
+      fromAccountNumber: AccountNumber,
+      toAccountNumber: AccountNumber
     )(
-        update: (CurrencyAccount, CurrencyAccount) => Either[TransferServiceErrors, (CurrencyAccount, CurrencyAccount)]
+      update: (CurrencyAccount, CurrencyAccount) => Either[TransferServiceErrors, (CurrencyAccount, CurrencyAccount)]
     ): EvalWrapper[Either[TransferServiceErrors, domain.model.AtomicTransferResult]] =
       EvalWrapper(delegate.modifyAccountsAtomically(fromAccountNumber, toAccountNumber)(update).value)
   }
 
   private final class EvalWrapperLogger(delegate: LoggingAlg[Try]) extends LoggingAlg[EvalWrapper] {
-    override def info(msg: String): EvalWrapper[Unit] = EvalWrapper(delegate.info(msg).get)
-    override def warn(msg: String): EvalWrapper[Unit] = EvalWrapper(delegate.warn(msg).get)
+    override def info(msg: String): EvalWrapper[Unit]                 = EvalWrapper(delegate.info(msg).get)
+    override def warn(msg: String): EvalWrapper[Unit]                 = EvalWrapper(delegate.warn(msg).get)
     override def error(msg: String, ex: Throwable): EvalWrapper[Unit] = EvalWrapper(delegate.error(msg, ex).get)
   }
 }
