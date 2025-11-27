@@ -2,7 +2,6 @@ package infrastructure
 
 import java.util.Currency
 
-import org.apache.pekko.actor.ActorRef
 import org.apache.pekko.http.scaladsl.marshalling.Marshal
 import org.apache.pekko.http.scaladsl.model._
 import org.apache.pekko.http.scaladsl.server.Route
@@ -10,7 +9,7 @@ import org.apache.pekko.http.scaladsl.testkit.ScalatestRouteTest
 import cats.Eval
 import domain.model.{AccountNumber, CurrencyAccount, CurrencyAmount}
 import infrastructure.actors.AccountActor.{PostNewAccount, TransferBetweenAccounts}
-import infrastructure.actors.{AccountActor, AccountRoutes}
+import infrastructure.actors.AccountRoutes
 import infrastructure.dataStores.InMemoryEvalDataStore
 import infrastructure.loggers.EvalLogger
 import org.scalatest.concurrent.ScalaFutures
@@ -45,9 +44,6 @@ class CurrencyAccountRoutesUnitTest
 
   val transferService: AccountTransferService[Eval] =
     new AccountTransferService[Eval](dataStore, logger)
-
-  override val currencyAccountActor: ActorRef =
-    system.actorOf(AccountActor.props(transferService), "currencyAccounts")
 
   lazy val routes: Route = accountRoutes
   private val sealedRoutes: Route = Route.seal(routes)

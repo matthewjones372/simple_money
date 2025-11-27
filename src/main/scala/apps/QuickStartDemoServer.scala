@@ -1,11 +1,11 @@
 package apps
 
-import org.apache.pekko.actor.{ActorRef, ActorSystem}
+import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.server.Route
 import org.apache.pekko.stream.{Materializer, SystemMaterializer}
 import cats.Eval
-import infrastructure.actors.{AccountActor, AccountRoutes}
+import infrastructure.actors.AccountRoutes
 import infrastructure.dataStores.InMemoryEvalDataStore
 import infrastructure.loggers.EvalLogger
 import service.AccountTransferService
@@ -29,9 +29,6 @@ object QuickStartDemoServer extends App with AccountRoutes {
 
   lazy val transferService: AccountTransferService[Eval] =
     new AccountTransferService[Eval](dataStore, logger)
-
-  val currencyAccountActor: ActorRef =
-    system.actorOf(AccountActor.props(transferService), "CurrencyAccountActor")
 
   val routes: Route = accountRoutes
   val port: Int     = 8081 // TODO: Load in from config file

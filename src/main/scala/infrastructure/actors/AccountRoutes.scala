@@ -1,15 +1,14 @@
 package infrastructure.actors
 
-import org.apache.pekko.actor.{ActorRef, ActorSystem}
+import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.event.Logging
-import org.apache.pekko.http.scaladsl.model.{HttpResponse, StatusCodes}
-import org.apache.pekko.http.scaladsl.unmarshalling.Unmarshal
+import org.apache.pekko.http.scaladsl.model.StatusCodes
 import org.apache.pekko.http.scaladsl.server.Route
 import org.apache.pekko.http.scaladsl.server.RouteConcatenation
-import org.apache.pekko.pattern.ask
 import org.apache.pekko.util.Timeout
-import domain.model.CurrencyAccount
-import infrastructure.actors.AccountActor._
+import cats.Eval
+import infrastructure.actors.AccountActor.{PostNewAccount, TransferBetweenAccounts}
+import domain.model.{AccountNumber, CurrencyAccount, CurrencyAmount}
 import infrastructure.actors.CirceSupport
 import sttp.model.StatusCode
 import sttp.apispec.openapi.Server
@@ -22,8 +21,10 @@ import sttp.tapir.server.pekkohttp.PekkoHttpServerInterpreter
 import sttp.tapir.swagger.bundle.SwaggerInterpreter
 
 import scala.concurrent.ExecutionContext
-import scala.concurrent.duration._
+import service.AccountTransferService
+
 import scala.concurrent.Future
+import scala.concurrent.duration._
 import scala.language.implicitConversions
 
 trait AccountRoutes extends CirceSupport with JsonCodecs {
@@ -36,18 +37,44 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
 
   lazy val log = Logging(system, classOf[AccountRoutes])
 
-  def currencyAccountActor: ActorRef
+  def transferService: AccountTransferService[Eval]
 
   implicit val timeout: Timeout = Timeout(5.seconds)
 
   implicit val stringJsonCodec: Codec[String, String, CodecFormat] =
     Codec.string.format(CodecFormat.Json())
 
-  private def toResult(response: HttpResponse): Future[Either[String, String]] = {
-    implicit val actorSystem: ActorSystem = system
-    Unmarshal(response.entity).to[String].map { body =>
-      if (response.status == StatusCodes.BadRequest) Left(body) else Right(body)
-    }
+  private def createAccount(
+    newAccount: PostNewAccount
+  ): Future[Either[String, String]] = Future {
+    transferService
+      .addNewAccount(
+        CurrencyAccount(
+          AccountNumber.fromString(newAccount.accountNumber),
+          CurrencyAmount.fromBigDecimal(newAccount.balance),
+          newAccount.currency
+        )
+      )
+      .value
+      .left
+      .map(err => s"Could not add ${newAccount.accountNumber} into the data store reason: $err")
+      .map(_ => s"Successfully added ${newAccount.accountNumber} into the datastore")
+  }
+
+  private def transferBetween(
+    transfer: TransferBetweenAccounts
+  ): Future[Either[String, String]] = Future {
+    transferService
+      .accountTransfer(
+        AccountNumber.fromString(transfer.fromAccountNumber),
+        AccountNumber.fromString(transfer.toAccountNumber),
+        CurrencyAmount.fromBigDecimal(transfer.amount)
+      )
+      .map(_.left.map(_.toString))
+      .value
+      .left
+      .map(err => s"Transfer unsuccessful from account ${transfer.fromAccountNumber} to ${transfer.toAccountNumber} error: $err")
+      .map(_ => s"${transfer.amount} has been transferred from ${transfer.fromAccountNumber} to ${transfer.toAccountNumber}")
   }
 
   private val listAccountsEndpoint: PublicEndpoint[Unit, Unit, Seq[CurrencyAccount], Any] =
@@ -88,19 +115,18 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
       .description("Transfers funds from one account to another, returning any validation errors.")
 
   private lazy val listAccountsServerEndpoint = listAccountsEndpoint.serverLogicSuccess[Future] { _ =>
-    (currencyAccountActor ? GetAccounts).mapTo[Seq[CurrencyAccount]]
+    log.info("Handling list accounts request")
+    Future.successful(transferService.listAllAccounts.value)
   }
 
   private lazy val createAccountServerEndpoint = createAccountEndpoint.serverLogic[Future] { newAccount =>
-    (currencyAccountActor ? newAccount)
-      .mapTo[HttpResponse]
-      .flatMap(toResult)
+    log.info(s"Handling create account request for ${newAccount.accountNumber}")
+    createAccount(newAccount)
   }
 
   private lazy val transferServerEndpoint = transferEndpoint.serverLogic[Future] { transfer =>
-    (currencyAccountActor ? transfer)
-      .mapTo[HttpResponse]
-      .flatMap(toResult)
+    log.info(s"Handling transfer request from ${transfer.fromAccountNumber} to ${transfer.toAccountNumber}")
+    transferBetween(transfer)
   }
 
   private lazy val swaggerEndpoints = SwaggerInterpreter(
