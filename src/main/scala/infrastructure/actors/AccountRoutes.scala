@@ -44,7 +44,7 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
     case HttpEntity.Strict(_, data) => data.utf8String
     case other =>
       val materializer = org.apache.pekko.stream.SystemMaterializer(system).materializer
-      import system.dispatcher
+      implicit val ec: ExecutionContext = system.dispatcher
       import scala.concurrent.Await
       Await.result(other.toStrict(3.seconds)(materializer), 3.seconds).data.utf8String
   }
