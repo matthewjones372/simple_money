@@ -14,11 +14,11 @@ lazy val root = (project in file(".")).settings(
     )
   ),
   name := "simple_money",
-  resolvers ++= Seq(
-    Resolver.mavenCentral,
-    Resolver.sonatypeRepo("public"),
-    Resolver.typesafeRepo("releases")
-  ),
+  resolvers ++=
+    Resolver.sonatypeOssRepos("releases") ++ Seq(
+      Resolver.mavenCentral,
+      Resolver.typesafeRepo("releases")
+    ),
   libraryDependencies ++= Seq(
     "org.apache.pekko" %% "pekko-actor" % pekkoVersion,
     "org.apache.pekko" %% "pekko-stream" % pekkoVersion,
