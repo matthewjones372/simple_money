@@ -3,11 +3,9 @@ package infrastructure.actors
 import org.apache.pekko.actor.{ActorRef, ActorSystem}
 import org.apache.pekko.event.Logging
 import org.apache.pekko.http.scaladsl.model.HttpResponse
-import org.apache.pekko.http.scaladsl.server.Directives.{pathPrefix, _}
-import org.apache.pekko.http.scaladsl.server.PathMatchers._
+import org.apache.pekko.http.scaladsl.model.HttpEntity
 import org.apache.pekko.http.scaladsl.server.Route
-import org.apache.pekko.http.scaladsl.server.directives.MethodDirectives.get
-import org.apache.pekko.http.scaladsl.server.directives.RouteDirectives.complete
+import org.apache.pekko.http.scaladsl.server.RouteConcatenation
 import org.apache.pekko.pattern.ask
 import org.apache.pekko.util.Timeout
 import domain.model.CurrencyAccount
@@ -19,6 +17,7 @@ import sttp.tapir._
 import sttp.tapir.stringToPath
 import sttp.tapir.generic.auto._
 import sttp.tapir.json.circe._
+import sttp.tapir.CodecFormat
 import sttp.tapir.server.pekkohttp.PekkoHttpServerInterpreter
 import sttp.tapir.swagger.bundle.SwaggerInterpreter
 
@@ -29,6 +28,8 @@ import scala.language.implicitConversions
 
 trait AccountRoutes extends CirceSupport with JsonCodecs {
 
+  import RouteConcatenation._
+
   implicit def system: ActorSystem
 
   implicit def executionContext: ExecutionContext = system.dispatcher
@@ -38,6 +39,21 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
   def currencyAccountActor: ActorRef
 
   implicit val timeout: Timeout = Timeout(5.seconds)
+
+  private def responseBody(response: HttpResponse): String = response.entity match {
+    case HttpEntity.Strict(_, data) => data.utf8String
+    case other =>
+      val materializer = org.apache.pekko.stream.SystemMaterializer(system).materializer
+      import system.dispatcher
+      import scala.concurrent.Await
+      Await.result(other.toStrict(3.seconds)(materializer), 3.seconds).data.utf8String
+  }
+
+  private def toResult(response: HttpResponse): Either[String, String] = {
+    val body = responseBody(response)
+    if (response.status == org.apache.pekko.http.scaladsl.model.StatusCodes.BadRequest) Left(body)
+    else Right(body)
+  }
 
   private val listAccountsEndpoint: PublicEndpoint[Unit, Unit, Seq[CurrencyAccount], Any] =
     endpoint.get
@@ -53,10 +69,10 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
       .in("api")
       .in("accounts")
       .in(jsonBody[PostNewAccount])
-      .out(stringBody.description("Account created."))
+      .out(stringBodyUtf8AnyFormat(CodecFormat.Json()).description("Account created."))
       .errorOut(
         statusCode(StatusCode.BadRequest)
-          .and(stringBody.description("Account already exists."))
+          .and(stringBodyUtf8AnyFormat(CodecFormat.Json()).description("Account already exists."))
       )
       .summary("Create a new account")
       .description("Creates a new account with the provided initial balance and currency.")
@@ -68,13 +84,29 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
       .in("accounts")
       .in("transfer")
       .in(jsonBody[TransferBetweenAccounts])
-      .out(stringBody.description("Transfer processed."))
+      .out(stringBodyUtf8AnyFormat(CodecFormat.Json()).description("Transfer processed."))
       .errorOut(
         statusCode(StatusCode.BadRequest)
-          .and(stringBody.description("Transfer failed."))
+          .and(stringBodyUtf8AnyFormat(CodecFormat.Json()).description("Transfer failed."))
       )
       .summary("Transfer funds between accounts")
       .description("Transfers funds from one account to another, returning any validation errors.")
+
+  private lazy val listAccountsServerEndpoint = listAccountsEndpoint.serverLogicSuccess[Future] { _ =>
+    (currencyAccountActor ? GetAccounts).mapTo[Seq[CurrencyAccount]]
+  }
+
+  private lazy val createAccountServerEndpoint = createAccountEndpoint.serverLogic[Future] { newAccount =>
+    (currencyAccountActor ? newAccount)
+      .mapTo[HttpResponse]
+      .map(toResult)
+  }
+
+  private lazy val transferServerEndpoint = transferEndpoint.serverLogic[Future] { transfer =>
+    (currencyAccountActor ? transfer)
+      .mapTo[HttpResponse]
+      .map(toResult)
+  }
 
   private lazy val swaggerEndpoints = SwaggerInterpreter(
     customiseDocsModel = _.servers(List(Server("http://localhost:8081")))
@@ -84,29 +116,17 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
     "1.0.0"
   )
 
+  private lazy val apiRoutes: Route = PekkoHttpServerInterpreter().toRoute(
+    List(
+      listAccountsServerEndpoint,
+      createAccountServerEndpoint,
+      transferServerEndpoint
+    )
+  )
+
   private lazy val swaggerRoutes: Route = PekkoHttpServerInterpreter().toRoute(swaggerEndpoints)
 
   lazy val accountRoutes: Route = {
-    swaggerRoutes ~ pathPrefix("api") {
-      pathPrefix("accounts") {
-        pathPrefix("transfer") {
-          (pathEndOrSingleSlash & put) {
-            entity(as[TransferBetweenAccounts]) { transferRequest =>
-              complete((currencyAccountActor ? transferRequest).mapTo[HttpResponse])
-            }
-          }
-        } ~ pathEndOrSingleSlash {
-          get {
-            val accounts = (currencyAccountActor ? GetAccounts).mapTo[Seq[CurrencyAccount]]
-            complete(accounts)
-          } ~ post {
-            entity(as[PostNewAccount]) { newAccount =>
-              val result = currencyAccountActor ? newAccount
-              complete(result.mapTo[HttpResponse])
-            }
-          }
-        }
-      }
-    }
+    swaggerRoutes ~ apiRoutes
   }
 }
