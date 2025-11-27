@@ -17,7 +17,7 @@ import sttp.tapir._
 import sttp.tapir.stringToPath
 import sttp.tapir.generic.auto._
 import sttp.tapir.json.circe._
-import sttp.tapir.CodecFormat
+import sttp.tapir.{Codec, CodecFormat}
 import sttp.tapir.server.pekkohttp.PekkoHttpServerInterpreter
 import sttp.tapir.swagger.bundle.SwaggerInterpreter
 
@@ -46,8 +46,11 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
       val materializer = org.apache.pekko.stream.SystemMaterializer(system).materializer
       implicit val ec: ExecutionContext = system.dispatcher
       import scala.concurrent.Await
-      Await.result(other.toStrict(3.seconds)(materializer), 3.seconds).data.utf8String
+      Await.result(other.toStrict(3.seconds)(using materializer), 3.seconds).data.utf8String
   }
+
+  implicit val stringJsonCodec: Codec[String, String, CodecFormat] =
+    Codec.string.format(CodecFormat.Json())
 
   private def toResult(response: HttpResponse): Either[String, String] = {
     val body = responseBody(response)
@@ -69,10 +72,10 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
       .in("api")
       .in("accounts")
       .in(jsonBody[PostNewAccount])
-      .out(stringBodyUtf8AnyFormat(CodecFormat.Json()).description("Account created."))
+      .out(stringBodyUtf8AnyFormat(stringJsonCodec).description("Account created."))
       .errorOut(
         statusCode(StatusCode.BadRequest)
-          .and(stringBodyUtf8AnyFormat(CodecFormat.Json()).description("Account already exists."))
+          .and(stringBodyUtf8AnyFormat(stringJsonCodec).description("Account already exists."))
       )
       .summary("Create a new account")
       .description("Creates a new account with the provided initial balance and currency.")
@@ -84,10 +87,10 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
       .in("accounts")
       .in("transfer")
       .in(jsonBody[TransferBetweenAccounts])
-      .out(stringBodyUtf8AnyFormat(CodecFormat.Json()).description("Transfer processed."))
+      .out(stringBodyUtf8AnyFormat(stringJsonCodec).description("Transfer processed."))
       .errorOut(
         statusCode(StatusCode.BadRequest)
-          .and(stringBodyUtf8AnyFormat(CodecFormat.Json()).description("Transfer failed."))
+          .and(stringBodyUtf8AnyFormat(stringJsonCodec).description("Transfer failed."))
       )
       .summary("Transfer funds between accounts")
       .description("Transfers funds from one account to another, returning any validation errors.")

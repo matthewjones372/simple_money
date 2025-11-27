@@ -11,6 +11,8 @@ import sttp.tapir.Schema
 import scala.util.Try
 
 trait JsonCodecs {
+  final case class ApiMessage(message: String)
+
   implicit val accountNumberEncoder: Encoder[AccountNumber] = Encoder.encodeString.contramap(_.value)
   implicit val accountNumberDecoder: Decoder[AccountNumber] = Decoder.decodeString.map(AccountNumber.fromString)
 
@@ -39,5 +41,9 @@ trait JsonCodecs {
 
   implicit val newAccountEncoder: Encoder[PostNewAccount] = deriveEncoder[PostNewAccount]
   implicit val newAccountDecoder: Decoder[PostNewAccount] = deriveDecoder[PostNewAccount]
+
+  implicit val apiMessageEncoder: Encoder[ApiMessage] = deriveEncoder[ApiMessage]
+  implicit val apiMessageDecoder: Decoder[ApiMessage] = deriveDecoder[ApiMessage]
+  implicit val apiMessageSchema: Schema[ApiMessage] = Schema.derived
 
 }
