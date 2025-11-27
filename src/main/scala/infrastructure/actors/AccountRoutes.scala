@@ -2,8 +2,7 @@ package infrastructure.actors
 
 import org.apache.pekko.actor.{ActorRef, ActorSystem}
 import org.apache.pekko.event.Logging
-import org.apache.pekko.http.scaladsl.model.HttpResponse
-import org.apache.pekko.http.scaladsl.model.HttpEntity
+import org.apache.pekko.http.scaladsl.model.{HttpResponse, StatusCodes}
 import org.apache.pekko.http.scaladsl.server.Route
 import org.apache.pekko.http.scaladsl.server.RouteConcatenation
 import org.apache.pekko.pattern.ask
@@ -40,22 +39,15 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
 
   implicit val timeout: Timeout = Timeout(5.seconds)
 
-  private def responseBody(response: HttpResponse): String = response.entity match {
-    case HttpEntity.Strict(_, data) => data.utf8String
-    case other =>
-      val materializer = org.apache.pekko.stream.SystemMaterializer(system).materializer
-      implicit val ec: ExecutionContext = system.dispatcher
-      import scala.concurrent.Await
-      Await.result(other.toStrict(3.seconds)(using materializer), 3.seconds).data.utf8String
-  }
-
   implicit val stringJsonCodec: Codec[String, String, CodecFormat] =
     Codec.string.format(CodecFormat.Json())
 
-  private def toResult(response: HttpResponse): Either[String, String] = {
-    val body = responseBody(response)
-    if (response.status == org.apache.pekko.http.scaladsl.model.StatusCodes.BadRequest) Left(body)
-    else Right(body)
+  private def toResult(response: HttpResponse): Future[Either[String, String]] = {
+    given actorSystem: ActorSystem = system
+    response.entity.toStrict(3.seconds).map { strictEntity =>
+      val body = strictEntity.data.utf8String
+      if (response.status == StatusCodes.BadRequest) Left(body) else Right(body)
+    }
   }
 
   private val listAccountsEndpoint: PublicEndpoint[Unit, Unit, Seq[CurrencyAccount], Any] =
@@ -102,13 +94,13 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
   private lazy val createAccountServerEndpoint = createAccountEndpoint.serverLogic[Future] { newAccount =>
     (currencyAccountActor ? newAccount)
       .mapTo[HttpResponse]
-      .map(toResult)
+      .flatMap(toResult)
   }
 
   private lazy val transferServerEndpoint = transferEndpoint.serverLogic[Future] { transfer =>
     (currencyAccountActor ? transfer)
       .mapTo[HttpResponse]
-      .map(toResult)
+      .flatMap(toResult)
   }
 
   private lazy val swaggerEndpoints = SwaggerInterpreter(
