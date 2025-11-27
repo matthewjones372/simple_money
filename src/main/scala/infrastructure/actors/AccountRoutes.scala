@@ -11,7 +11,7 @@ import infrastructure.actors.AccountActor.{PostNewAccount, TransferBetweenAccoun
 import domain.model.{AccountNumber, CurrencyAccount, CurrencyAmount}
 import infrastructure.actors.CirceSupport
 import sttp.model.StatusCode
-import sttp.apispec.openapi.Server
+import sttp.apispec.openapi.{OpenAPI, Server}
 import sttp.tapir._
 import sttp.tapir.stringToPath
 import sttp.tapir.generic.auto._
@@ -43,6 +43,9 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
 
   implicit val stringJsonCodec: Codec[String, String, CodecFormat] =
     Codec.string.format(CodecFormat.Json())
+
+  def swaggerServerUrl: Option[String] =
+    sys.env.get("SWAGGER_SERVER_URL").orElse(sys.props.get("swagger.server.url")).orElse(Some("http://localhost:8081"))
 
   private def createAccount(
     newAccount: PostNewAccount
@@ -129,13 +132,17 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
     transferBetween(transfer)
   }
 
-  private lazy val swaggerEndpoints = SwaggerInterpreter(
-    customiseDocsModel = _.servers(List(Server("http://localhost:8081")))
-  ).fromEndpoints[Future](
-    List(listAccountsEndpoint, createAccountEndpoint, transferEndpoint),
-    "Simple Money API",
-    "1.0.0"
-  )
+  private lazy val swaggerEndpoints = {
+    val customiseDocsModel: OpenAPI => OpenAPI = swaggerServerUrl
+      .map(url => (openApi: OpenAPI) => openApi.servers(List(Server(url))))
+      .getOrElse(identity[OpenAPI])
+
+    SwaggerInterpreter(customiseDocsModel = customiseDocsModel).fromEndpoints[Future](
+      List(listAccountsEndpoint, createAccountEndpoint, transferEndpoint),
+      "Simple Money API",
+      "1.0.0"
+    )
+  }
 
   private lazy val apiRoutes: Route = PekkoHttpServerInterpreter().toRoute(
     List(

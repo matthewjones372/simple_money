@@ -30,9 +30,12 @@ object QuickStartDemoServer extends App with AccountRoutes {
   lazy val transferService: AccountTransferService[Eval] =
     new AccountTransferService[Eval](dataStore, logger)
 
+  val port: Int    = 8081 // TODO: Load in from config file
+  val host: String = "0.0.0.0"
+
+  override val swaggerServerUrl: Option[String] = Some(s"http://localhost:$port")
+
   val routes: Route = accountRoutes
-  val port: Int     = 8081 // TODO: Load in from config file
-  val host: String  = "0.0.0.0"
 
   Http().newServerAt(host, port).bindFlow(routes)
 
