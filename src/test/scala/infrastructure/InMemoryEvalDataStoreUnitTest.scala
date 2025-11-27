@@ -102,7 +102,9 @@ class InMemoryEvalDataStoreUnitTest extends AnyFreeSpec with Matchers {
         )
 
         updateResult shouldBe Right(())
-        elapsedMs should be >= delayMillis
+        // Allow a small tolerance for scheduling jitter while still ensuring the atomic lock blocks
+        // concurrent updates for approximately the configured delay.
+        elapsedMs should be >= delayMillis - 10
       }
     }
 

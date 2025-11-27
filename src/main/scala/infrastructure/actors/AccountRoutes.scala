@@ -3,6 +3,7 @@ package infrastructure.actors
 import org.apache.pekko.actor.{ActorRef, ActorSystem}
 import org.apache.pekko.event.Logging
 import org.apache.pekko.http.scaladsl.model.{HttpResponse, StatusCodes}
+import org.apache.pekko.http.scaladsl.unmarshalling.Unmarshal
 import org.apache.pekko.http.scaladsl.server.Route
 import org.apache.pekko.http.scaladsl.server.RouteConcatenation
 import org.apache.pekko.pattern.ask
@@ -43,9 +44,8 @@ trait AccountRoutes extends CirceSupport with JsonCodecs {
     Codec.string.format(CodecFormat.Json())
 
   private def toResult(response: HttpResponse): Future[Either[String, String]] = {
-    given actorSystem: ActorSystem = system
-    response.entity.toStrict(3.seconds).map { strictEntity =>
-      val body = strictEntity.data.utf8String
+    implicit val actorSystem: ActorSystem = system
+    Unmarshal(response.entity).to[String].map { body =>
       if (response.status == StatusCodes.BadRequest) Left(body) else Right(body)
     }
   }
