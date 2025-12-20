@@ -1,4 +1,4 @@
-package domain.model
+package domain
 
 import java.util.Currency
 
@@ -12,12 +12,7 @@ final case class AccountNumber(value: String) extends AnyVal {
   def !=(that: AccountNumber): Boolean = this.value != that.value
 }
 
-object AccountNumber {
-  def fromString(value: String): AccountNumber = AccountNumber(value)
-}
-
 final case class CurrencyAmount(value: BigDecimal) {
-
   def +(that: CurrencyAmount): CurrencyAmount = CurrencyAmount(this.value + that.value)
 
   def -(that: CurrencyAmount): CurrencyAmount = CurrencyAmount(this.value - that.value)
