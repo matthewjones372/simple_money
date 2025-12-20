@@ -5,7 +5,7 @@ import service.TransferServiceErrors.{AccountAlreadyExists, AccountDoesNotExist,
 import zio.*
 import zio.stm.{STM, TMap}
 
-trait AccountService {
+trait AccountService:
 
   def getAllAccounts: UIO[Seq[CurrencyAccount]]
 
@@ -21,13 +21,11 @@ trait AccountService {
   )(
     update: (CurrencyAccount, CurrencyAccount) => Either[TransferServiceErrors, (CurrencyAccount, CurrencyAccount)]
   ): IO[TransferServiceErrors, AccountTransfer]
-}
 
-object AccountService {
+object AccountService:
   val layer: ULayer[AccountService] =
-    ZLayer {
+    ZLayer:
       TMap.empty[AccountNumber, CurrencyAccount].commit.map(DefaultDataStore(_))
-    }
 
   def getAllAccounts: URIO[AccountService, Seq[CurrencyAccount]] =
     ZIO.serviceWithZIO[AccountService](_.getAllAccounts)
@@ -48,11 +46,10 @@ object AccountService {
     update: (CurrencyAccount, CurrencyAccount) => Either[TransferServiceErrors, (CurrencyAccount, CurrencyAccount)]
   ): ZIO[AccountService, TransferServiceErrors, AccountTransfer] =
     ZIO.serviceWithZIO[AccountService](_.transfer(fromAccountNumber, toAccountNumber)(update))
-}
 
 private case class DefaultDataStore(
   accounts: TMap[AccountNumber, CurrencyAccount]
-) extends AccountService {
+) extends AccountService:
 
   override def getAllAccounts: UIO[Seq[CurrencyAccount]] =
     accounts.values.commit
@@ -60,26 +57,21 @@ private case class DefaultDataStore(
   override def getAccount(
     accountNumber: AccountNumber
   ): IO[TransferServiceErrors, CurrencyAccount] =
-    accounts.get(accountNumber).commit.flatMap {
+    accounts.get(accountNumber).commit.flatMap:
       case Some(account) => ZIO.succeed(account)
       case None          => ZIO.fail(AccountDoesNotExist)
-    }
 
   override def updateAccount(account: CurrencyAccount): IO[TransferServiceErrors, Unit] =
-    STM.atomically {
-      accounts.contains(account.accountNumber).flatMap {
+    STM.atomically:
+      accounts.contains(account.accountNumber).flatMap:
         case true  => accounts.put(account.accountNumber, account)
         case false => STM.fail(FailedToUpdateAccount)
-      }
-    }
 
   override def postAccount(account: CurrencyAccount): IO[TransferServiceErrors, Unit] =
-    STM.atomically {
-      accounts.contains(account.accountNumber).flatMap {
+    STM.atomically:
+      accounts.contains(account.accountNumber).flatMap:
         case true  => STM.fail(AccountAlreadyExists)
         case false => accounts.put(account.accountNumber, account)
-      }
-    }
 
   override def transfer(
     fromAccountNumber: AccountNumber,
@@ -87,8 +79,8 @@ private case class DefaultDataStore(
   )(
     update: (CurrencyAccount, CurrencyAccount) => Either[TransferServiceErrors, (CurrencyAccount, CurrencyAccount)]
   ): IO[TransferServiceErrors, AccountTransfer] =
-    STM.atomically {
-      for {
+    STM.atomically:
+      for
         fromAccountOpt          <- accounts.get(fromAccountNumber)
         toAccountOpt            <- accounts.get(toAccountNumber)
         fromAccount             <- STM.fromOption(fromAccountOpt).orElseFail(AccountDoesNotExist)
@@ -97,6 +89,4 @@ private case class DefaultDataStore(
         (updatedFrom, updatedTo) = result
         _                       <- accounts.put(fromAccountNumber, updatedFrom)
         _                       <- accounts.put(toAccountNumber, updatedTo)
-      } yield AccountTransfer(fromAccount, toAccount, updatedFrom, updatedTo)
-    }
-}
+      yield AccountTransfer(fromAccount, toAccount, updatedFrom, updatedTo)

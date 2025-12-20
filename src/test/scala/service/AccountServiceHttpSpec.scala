@@ -8,7 +8,7 @@ import zio.test.Assertion._
 import service.AccountService
 import service.TransferServiceErrors._
 
-object AccountTransferServiceSpec extends ZIOSpecDefault {
+object AccountServiceHttpSpec extends ZIOSpecDefault {
 
   val testLayer: ULayer[AccountService & AccountTransferService] =
     AccountService.layer ++ AccountTransferService.layer
@@ -35,7 +35,7 @@ object AccountTransferServiceSpec extends ZIOSpecDefault {
     _ <- AccountService.postAccount(negativeAccount)
   } yield ()
 
-  def spec: Spec[Any, Any] = suite("AccountTransferService")(
+  def spec = suite("AccountServiceHttpSpec")(
     test("listAllAccounts should return a seq of currency accounts") {
       for {
         _       <- setupAccounts
@@ -147,5 +147,7 @@ object AccountTransferServiceSpec extends ZIOSpecDefault {
         toBalance == CurrencyAmount(100)
       )
     }.provide(testLayer)
-  ) @@ TestAspect.sequential
+  ).provideLayer(
+    Runtime.removeDefaultLoggers >>> ZTestLogger.default
+  )
 }

@@ -17,7 +17,7 @@ case class TransferRequest(fromAccountNumber: String, toAccountNumber: String, a
 case class ErrorResponse(error: String)
 case class SuccessResponse(message: String)
 
-object Schemas {
+object Schemas:
   given accountResponseSchema: Schema[AccountResponse] = DeriveSchema.gen[AccountResponse]
   given accountResponseSeqSchema: Schema[Seq[AccountResponse]] =
     Schema.list[AccountResponse].transform(_.toSeq, _.toList)
@@ -32,31 +32,28 @@ object Schemas {
       account.balance.value,
       account.currency.getCurrencyCode
     )
-}
 
-object AccountRoutes {
+object AccountRoutes:
   import Schemas.{*, given}
 
-  // Define endpoints for OpenAPI generation
-  val getAccountsEndpoint =
+  private val getAccountsEndpoint =
     Endpoint(RoutePattern.GET / "api" / "accounts")
       .out[Seq[AccountResponse]]
       .outError[ErrorResponse](Status.InternalServerError)
 
-  val postAccountEndpoint =
+  private val postAccountEndpoint =
     Endpoint(RoutePattern.POST / "api" / "accounts")
       .in[PostNewAccountRequest]
       .out[SuccessResponse]
       .outError[ErrorResponse](Status.BadRequest)
 
-  val transferEndpoint =
+  private val transferEndpoint =
     Endpoint(RoutePattern.PUT / "api" / "accounts" / "transfer")
       .in[TransferRequest]
       .out[SuccessResponse]
       .outError[ErrorResponse](Status.BadRequest)
 
-  // Generate OpenAPI spec from endpoints
-  val openAPISpec: OpenAPI = {
+  val openAPISpec: OpenAPI =
     val baseSpec = OpenAPIGen.fromEndpoints(
       title = "Simple Money API",
       version = "1.0.0",
@@ -65,7 +62,6 @@ object AccountRoutes {
       transferEndpoint
     )
 
-    // Add schema definitions to components
     import scala.collection.immutable.ListMap
 
     val schemasMap = ListMap(
@@ -91,22 +87,17 @@ object AccountRoutes {
       .getOrElse(OpenAPI.Components(schemas = schemasMap))
 
     baseSpec.copy(components = Some(newComponents))
-  }
 
-  // Implement handlers using regular Routes
   val routes: Routes[AccountService & AccountTransferService, Response] = Routes(
-    // GET /api/accounts
-    Method.GET / "api" / "accounts" -> handler {
-      AccountTransferService.listAllAccounts.map { accounts =>
+    Method.GET / "api" / "accounts" -> handler:
+      AccountTransferService.listAllAccounts.map: accounts =>
         val responses = accounts.map(toAccountResponse)
         val json      = JsonCodec.jsonEncoder(accountResponseSeqSchema).encodeJson(responses, None)
         Response.json(json.toString)
-      }
-    },
+    ,
 
-    // POST /api/accounts
-    Method.POST / "api" / "accounts" -> handler { (req: Request) =>
-      val result = for {
+    Method.POST / "api" / "accounts" -> handler: (req: Request) =>
+      val result = for
         body     <- req.body.asString
         decoded  <- ZIO.fromEither(JsonCodec.jsonDecoder(postAccountRequestSchema).decodeJson(body))
         currency <- ZIO.attempt(Currency.getInstance(decoded.currencyCode))
@@ -118,18 +109,16 @@ object AccountRoutes {
         _       <- AccountTransferService.addNewAccount(account)
         response = SuccessResponse(s"Successfully added ${decoded.accountNumber} into the datastore")
         json     = JsonCodec.jsonEncoder(successResponseSchema).encodeJson(response, None)
-      } yield Response.json(json.toString)
+      yield Response.json(json.toString)
 
-      result.catchAll {
+      result.catchAll:
         case err: TransferServiceErrors => ZIO.succeed(Response.badRequest(err.toString))
         case err: Throwable             => ZIO.succeed(Response.badRequest(err.getMessage))
         case err                        => ZIO.succeed(Response.badRequest(err.toString))
-      }
-    },
+    ,
 
-    // PUT /api/accounts/transfer
-    Method.PUT / "api" / "accounts" / "transfer" -> handler { (req: Request) =>
-      val result = for {
+    Method.PUT / "api" / "accounts" / "transfer" -> handler: (req: Request) =>
+      val result = for
         body    <- req.body.asString
         decoded <- ZIO.fromEither(JsonCodec.jsonDecoder(transferRequestSchema).decodeJson(body))
         _ <- AccountTransferService.accountTransfer(
@@ -142,13 +131,10 @@ object AccountRoutes {
             s"${decoded.amount} has been transferred from ${decoded.fromAccountNumber} to ${decoded.toAccountNumber}"
           )
         json = JsonCodec.jsonEncoder(successResponseSchema).encodeJson(response, None)
-      } yield Response.json(json.toString)
+      yield Response.json(json.toString)
 
-      result.catchAll {
+      result.catchAll:
         case err: TransferServiceErrors => ZIO.succeed(Response.badRequest(err.toString))
         case err: Throwable             => ZIO.succeed(Response.badRequest(err.getMessage))
         case err                        => ZIO.succeed(Response.badRequest(err.toString))
-      }
-    }
   )
-}

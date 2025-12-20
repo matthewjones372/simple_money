@@ -8,12 +8,12 @@ import zio.test.Assertion._
 import service.AccountService
 import service.TransferServiceErrors._
 
-object InMemoryDataStoreSpec extends ZIOSpecDefault {
+object AccountServiceSpec extends ZIOSpecDefault {
 
   val gbp: Currency = Currency.getInstance("GBP")
   val testAccount   = CurrencyAccount(AccountNumber("TEST_ACCOUNT"), CurrencyAmount(100), gbp)
 
-  def spec: Spec[Any, Any] = suite("InMemoryDataStore")(
+  def spec = suite("AccountServiceSpec")(
     test("should successfully post a new account") {
       for {
         _         <- AccountService.postAccount(testAccount)
@@ -79,5 +79,8 @@ object InMemoryDataStoreSpec extends ZIOSpecDefault {
         result.toBefore == account2
       )
     }
-  ).provide(AccountService.layer) @@ TestAspect.sequential
+  ).provide(AccountService.layer)
+    .provideLayer(
+      Runtime.removeDefaultLoggers >>> ZTestLogger.default
+    )
 }
