@@ -1,10 +1,11 @@
-lazy val pekkoHttpVersion = "1.1.0"
-lazy val pekkoVersion = "1.1.0"
-lazy val circeVersion = "0.14.7"
-lazy val scalaTestVersion = "3.2.18"
-lazy val catsVersion = "2.10.0"
-lazy val logbackVersion = "1.4.14"
-lazy val scalaLoggingVersion = "3.9.5"
+lazy val tapirVersion = "1.13.3"
+lazy val pekkoHttpVersion = "1.3.0"
+lazy val pekkoVersion = "1.4.0"
+lazy val circeVersion = "0.14.15"
+lazy val scalaTestVersion = "3.2.19"
+lazy val catsVersion = "2.13.0"
+lazy val logbackVersion = "1.5.22"
+lazy val scalaLoggingVersion = "3.9.6"
 
 lazy val root = (project in file(".")).settings(
   inThisBuild(
@@ -17,7 +18,12 @@ lazy val root = (project in file(".")).settings(
   libraryDependencies ++= Seq(
     "org.apache.pekko" %% "pekko-actor" % pekkoVersion,
     "org.apache.pekko" %% "pekko-stream" % pekkoVersion,
+    "org.apache.pekko" %% "pekko-slf4j" % pekkoVersion,
     "org.apache.pekko" %% "pekko-http" % pekkoHttpVersion,
+    "com.softwaremill.sttp.tapir" %% "tapir-core" % tapirVersion,
+    "com.softwaremill.sttp.tapir" %% "tapir-pekko-http-server" % tapirVersion,
+    "com.softwaremill.sttp.tapir" %% "tapir-json-circe" % tapirVersion,
+    "com.softwaremill.sttp.tapir" %% "tapir-swagger-ui-bundle" % tapirVersion,
     "io.circe" %% "circe-parser" % circeVersion,
     "io.circe" %% "circe-generic" % circeVersion,
     "org.typelevel" %% "cats-core" % catsVersion,
@@ -26,6 +32,17 @@ lazy val root = (project in file(".")).settings(
     "org.apache.pekko" %% "pekko-testkit" % pekkoVersion % Test,
     "org.apache.pekko" %% "pekko-http-testkit" % pekkoHttpVersion % Test,
     "org.scalatest" %% "scalatest" % scalaTestVersion % Test
+  ),
+  dependencyOverrides ++= Seq(
+    "org.apache.pekko" %% "pekko-actor" % pekkoVersion,
+    "org.apache.pekko" %% "pekko-stream" % pekkoVersion,
+    "org.apache.pekko" %% "pekko-slf4j" % pekkoVersion,
+    "org.apache.pekko" %% "pekko-protobuf-v3" % pekkoVersion,
+    "org.apache.pekko" %% "pekko-testkit" % pekkoVersion,
+    "org.apache.pekko" %% "pekko-http" % pekkoHttpVersion,
+    "org.apache.pekko" %% "pekko-http-core" % pekkoHttpVersion,
+    "org.apache.pekko" %% "pekko-parsing" % pekkoHttpVersion,
+    "org.apache.pekko" %% "pekko-http-testkit" % pekkoHttpVersion
   )
 )
 

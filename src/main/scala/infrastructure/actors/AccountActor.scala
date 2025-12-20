@@ -28,14 +28,14 @@ class AccountActor(transferService: AccountTransferService[Eval]) extends Actor 
       ) map {
         case Right(_) =>
           HttpResponse(entity =
-            HttpEntity(ContentTypes.`application/json`, s"Successfully added $accountNumber into the datastore")
+            HttpEntity(ContentTypes.`application/json`, s"""{"message": "Successfully added $accountNumber into the datastore"}""")
           )
         case Left(err) =>
           HttpResponse(
             BadRequest,
             entity = HttpEntity(
               ContentTypes.`application/json`,
-              s"Could not add $accountNumber into the data store reason: $err"
+              s"""{"error": "Could not add $accountNumber into the data store reason: $err"}"""
             )
           )
       }
@@ -53,7 +53,7 @@ class AccountActor(transferService: AccountTransferService[Eval]) extends Actor 
             HttpResponse(entity =
               HttpEntity(
                 ContentTypes.`application/json`,
-                s"$amount has been transferred from $fromAccountNumber to $toAccountNumber"
+                s"""{"message": "$amount has been transferred from $fromAccountNumber to $toAccountNumber"}"""
               )
             )
           case Left(err) =>
@@ -61,7 +61,7 @@ class AccountActor(transferService: AccountTransferService[Eval]) extends Actor 
               BadRequest,
               entity = HttpEntity(
                 ContentTypes.`application/json`,
-                s"Transfer unsuccessful from account $fromAccountNumber to $toAccountNumber error: ${err.toString}"
+                s"""{"error": "Transfer unsuccessful from account $fromAccountNumber to $toAccountNumber error: ${err.toString}"}"""
               )
             )
         }

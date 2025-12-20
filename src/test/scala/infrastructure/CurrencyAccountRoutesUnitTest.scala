@@ -10,7 +10,8 @@ import org.apache.pekko.http.scaladsl.testkit.ScalatestRouteTest
 import cats.Eval
 import domain.model.{AccountNumber, CurrencyAccount, CurrencyAmount}
 import infrastructure.actors.AccountActor.{PostNewAccount, TransferBetweenAccounts}
-import infrastructure.actors.{AccountActor, AccountRoutes}
+import infrastructure.actors.{AccountActor, CirceSupport}
+import infrastructure.endpoints.AccountTapirRoutes
 import infrastructure.dataStores.InMemoryEvalDataStore
 import infrastructure.loggers.EvalLogger
 import org.scalatest.concurrent.ScalaFutures
@@ -23,7 +24,8 @@ class CurrencyAccountRoutesUnitTest
     with Matchers
     with ScalaFutures
     with ScalatestRouteTest
-    with AccountRoutes {
+    with AccountTapirRoutes
+    with CirceSupport {
 
   private val gbp: Currency = Currency.getInstance("GBP")
 
@@ -47,10 +49,20 @@ class CurrencyAccountRoutesUnitTest
 
   override val currencyAccountActor: ActorRef =
     system.actorOf(AccountActor.props(transferService), "currencyAccounts")
+  
+  override def executionContext: scala.concurrent.ExecutionContext = system.dispatcher
 
-  lazy val routes: Route = accountRoutes
+  lazy val routes: Route = tapirRoutes
 
   "CurrencyAccountRoutes" - {
+    "Swagger UI" - {
+      "be accessible" in {
+        Get("/docs/index.html") ~> routes ~> check {
+          status shouldBe StatusCodes.OK
+          contentType.toString should include("text/html")
+        }
+      }
+    }
     "(GET :/api/accounts) should" - {
       "return all accounts" in {
         val request = HttpRequest(uri = "/api/accounts")
@@ -85,6 +97,8 @@ class CurrencyAccountRoutesUnitTest
 
         request ~> routes ~> check {
           status shouldBe StatusCodes.OK
+          contentType shouldBe ContentTypes.`application/json`
+          responseAs[String] should include("Successfully added SOME_ACCOUNT_NUMBER into the datastore")
         }
       }
     }
@@ -103,9 +117,8 @@ class CurrencyAccountRoutesUnitTest
         request ~> routes ~> check {
           status shouldBe StatusCodes.OK
           contentType shouldBe ContentTypes.`application/json`
-          responseAs[String] shouldBe "40 has been transferred from Account1 to Account2"
+          responseAs[String] should include("40 has been transferred from Account1 to Account2")
         }
-
       }
       "return an error when attempting to transfer from a non-existing account" in {
         val transferRequest = TransferBetweenAccounts("NON_EXISTING", "Account2", 40)
