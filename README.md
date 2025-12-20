@@ -147,26 +147,30 @@ Response body on failure:
 ```
 
 ### Design
-* The account data structure has been kept simple for the initial design. 
-In a realistic situation this would undoubtedly be more complicated.
+
+* **ZIO 2 Based Architecture**: The application uses ZIO 2 for all effects, providing type-safe, composable, and performant functional programming.
+
+* **ZIO HTTP**: REST API is implemented using ZIO HTTP, providing native ZIO integration without the need for Pekko/Akka.
+
+* **ZIO STM for Concurrency**: The in-memory data store uses ZIO's Software Transactional Memory (STM) with `TMap` for thread-safe, atomic operations on accounts. This eliminates the need for manual locking and ensures consistent concurrent transfers.
+
+* **Service Pattern**: Following ZIO best practices, the application uses the service pattern with ZLayers instead of tagless final style:
+  - `AccountGateway` - Data access layer
+  - `Logger` - Logging service
+  - `AccountTransferService` - Business logic layer
+
+* **ZIO Test**: All tests are written using ZIO Test framework, providing better integration with ZIO effects and more expressive test assertions.
+
+* The account data structure has been kept simple for the initial design:
 ```
 final case class CurrencyAccount(
-    accountNumber: String,
-    balance: Double,
+    accountNumber: AccountNumber,
+    balance: CurrencyAmount,
     currency: Currency
 )
 ```
 
-* Business logic is kept separate from the infrastructure such as the datastore. 
-This allows for a different Monad effect to be implemented without changing the business logic. 
-
-* An example of a concrete TransferService has been implemented using the Cats Eval Monad, this was to demonstrate the
-classes usage with something other than a Future.
-
-* The design allows for a different gateway to be implemented in the future it just has to extend GatewayAlg 
-and implement the methods.
-
-* Akka HTTP has been used as the REST interface. 
+* Business logic is kept separate from infrastructure (datastore, HTTP). The ZLayer composition allows for easy testing and swapping of implementations. 
 
 
 #### Nice to haves

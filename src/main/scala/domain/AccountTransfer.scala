@@ -1,6 +1,6 @@
-package domain.model
+package domain
 
-final case class AtomicTransferResult(
+final case class AccountTransfer(
   fromBefore: CurrencyAccount,
   toBefore: CurrencyAccount,
   fromAfter: CurrencyAccount,
