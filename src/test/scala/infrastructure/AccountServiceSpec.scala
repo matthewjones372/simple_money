@@ -30,6 +30,15 @@ object AccountServiceSpec extends ZIOSpecDefault {
     )
 
   def spec = suite("AccountServiceSpec")(
+    test("should mask account numbers when printed") {
+      val number = AccountNumber("GB29 NWBK 6016 1331 3282 19")
+      assertTrue(
+        number.masked == "****8219",
+        number.toString == "AccountNumber(****8219)",
+        testAccount.toString.contains("****OUNT"),
+        !testAccount.toString.contains("TEST_ACCOUNT")
+      )
+    },
     test("should successfully post a new account") {
       for {
         _         <- AccountService.postAccount(testAccount)

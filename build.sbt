@@ -35,6 +35,5 @@ scalacOptions ++= Seq(
 // For Docker Packaging
 dockerBaseImage := "eclipse-temurin:25-jre"
 dockerExposedPorts := Seq(8081)
-enablePlugins(AshScriptPlugin)
 enablePlugins(JavaAppPackaging)
 enablePlugins(DockerPlugin)
