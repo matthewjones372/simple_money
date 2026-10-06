@@ -34,6 +34,9 @@ object AccountRoutesSpec extends ZIOSpecDefault:
       )
     )
 
+  def lookup(accountNumber: String) =
+    run(Request.post("/api/accounts/lookup", Body.fromString(s"""{"accountNumber": "$accountNumber"}""")))
+
   def transferRequest(from: String, to: String, amount: String) =
     Request.post(
       "/api/accounts/transfer",
@@ -65,41 +68,55 @@ object AccountRoutesSpec extends ZIOSpecDefault:
   def unprocessable(code: String)(response: Response) = assertError(response, Status.UnprocessableEntity, code)
 
   def spec = suite("AccountRoutesSpec")(
-    test("creates an account and lists it") {
+    test("creates an account, returning it with its id and location, and lists it") {
       for
         created  <- postAccount("A", "50.00", "GBP")
-        message  <- decode[SuccessResponse](created)
+        account  <- decode[AccountResponse](created)
         accounts <- get("/api/accounts").flatMap(decode[AccountPageResponse])
       yield assertTrue(
-        created.status == Status.Ok,
-        message == SuccessResponse("Successfully added A into the datastore"),
-        accounts == AccountPageResponse(List(AccountResponse("A", BigDecimal("50.00"), "GBP")), None)
+        created.status == Status.Created,
+        created.header(Header.Location).map(_.url.encode).contains(s"/api/accounts/${account.id}"),
+        java.util.UUID.fromString(account.id) != null,
+        account == AccountResponse(account.id, "A", BigDecimal("50.00"), "GBP"),
+        accounts == AccountPageResponse(List(account), None)
       )
     },
-    test("gets one account by its number, including one with spaces") {
+    test("gets an account at its location") {
       for
-        _        <- postAccount("GB29 NWBK 6016 1331 3282 19", "50.00", "GBP")
-        response <- get("/api/accounts/GB29%20NWBK%206016%201331%203282%2019")
+        created  <- postAccount("GB29 NWBK 6016 1331 3282 19", "50.00", "GBP")
+        location  = created.header(Header.Location).get.url.encode
+        response <- get(location)
         account  <- decode[AccountResponse](response)
       yield assertTrue(
         response.status == Status.Ok,
-        account == AccountResponse("GB29 NWBK 6016 1331 3282 19", BigDecimal("50.00"), "GBP")
+        account.accountNumber == "GB29 NWBK 6016 1331 3282 19",
+        account.balance == BigDecimal("50.00")
       )
     },
-    test("returns 404 for an account that does not exist") {
-      get("/api/accounts/NOPE").flatMap(notFound("AccountDoesNotExist"))
-    },
-    test("pages through accounts with limit and after") {
+    test("looks up an account by the number in the request body") {
       for
-        _      <- ZIO.foreachDiscard(List("C", "A", "E", "B", "D"))(postAccount(_, "1", "GBP"))
+        created  <- postAccount("GB29 NWBK 6016 1331 3282 19", "50.00", "GBP").flatMap(decode[AccountResponse])
+        response <- lookup("GB29 NWBK 6016 1331 3282 19")
+        account  <- decode[AccountResponse](response)
+      yield assertTrue(response.status == Status.Ok, account == created)
+    },
+    test("returns 404 for an id or account number that does not exist") {
+      for
+        byId     <- get(s"/api/accounts/${java.util.UUID.randomUUID()}").flatMap(notFound("AccountDoesNotExist"))
+        byNumber <- lookup("NOPE").flatMap(notFound("AccountDoesNotExist"))
+      yield byId && byNumber
+    },
+    test("pages through accounts with limit and an id cursor") {
+      for
+        created <-
+          ZIO.foreach(List("C", "A", "E", "B", "D"))(postAccount(_, "1", "GBP").flatMap(decode[AccountResponse]))
+        ids     = created.map(account => account.accountNumber -> account.id).toMap
         first  <- get("/api/accounts?limit=2").flatMap(decode[AccountPageResponse])
-        second <-
-          get(s"/api/accounts?limit=2&after=${first.next.get}").flatMap(decode[AccountPageResponse])
-        third <-
-          get(s"/api/accounts?limit=2&after=${second.next.get}").flatMap(decode[AccountPageResponse])
+        second <- get(s"/api/accounts?limit=2&after=${first.next.get}").flatMap(decode[AccountPageResponse])
+        third  <- get(s"/api/accounts?limit=2&after=${second.next.get}").flatMap(decode[AccountPageResponse])
       yield assertTrue(
         first.accounts.map(_.accountNumber) == List("A", "B"),
-        first.next.contains("B"),
+        first.next.contains(ids("B")),
         second.accounts.map(_.accountNumber) == List("C", "D"),
         third.accounts.map(_.accountNumber) == List("E"),
         third.next.isEmpty
@@ -107,9 +124,15 @@ object AccountRoutesSpec extends ZIOSpecDefault:
     },
     test("returns at most 100 accounts when no limit is given") {
       for
-        _    <- ZIO.foreachDiscard(1 to 101)(n => postAccount(f"ACC$n%03d", "1", "GBP"))
-        page <- get("/api/accounts").flatMap(decode[AccountPageResponse])
-      yield assertTrue(page.accounts.size == 100, page.next.contains("ACC100"))
+        created <- ZIO.foreach(1 to 101)(n => postAccount(f"ACC$n%03d", "1", "GBP").flatMap(decode[AccountResponse]))
+        page    <- get("/api/accounts").flatMap(decode[AccountPageResponse])
+      yield assertTrue(page.accounts.size == 100, page.next.contains(created(99).id))
+    },
+    test("refuses a cursor that is not an account's id") {
+      for
+        unknown <- get(s"/api/accounts?after=${java.util.UUID.randomUUID()}").flatMap(badRequest("InvalidCursor"))
+        notAnId <- get("/api/accounts?after=B").flatMap(badRequest("MalformedQueryParam"))
+      yield unknown && notAnId
     },
     test("refuses a limit outside 1 to 1000, or one that is not a number") {
       for
@@ -120,7 +143,7 @@ object AccountRoutesSpec extends ZIOSpecDefault:
     },
     test("accepts a balance with trailing zeros beyond the currency's minor units") {
       for created <- postAccount("A", "50.000", "GBP")
-      yield assertTrue(created.status == Status.Ok)
+      yield assertTrue(created.status == Status.Created)
     },
     test("rejects a negative opening balance") {
       postAccount("A", "-5.00", "GBP").flatMap(badRequest("CannotOpenAccountWithNegativeBalance"))
@@ -166,7 +189,7 @@ object AccountRoutesSpec extends ZIOSpecDefault:
         iban     <- postAccount("GB29 NWBK 6016 1331 3282 19", "1", "GBP")
         longest  <- postAccount("B" * 64, "1", "GBP")
       yield empty && blank && padded && overlong && control &&
-        assertTrue(iban.status == Status.Ok, longest.status == Status.Ok)
+        assertTrue(iban.status == Status.Created, longest.status == Status.Created)
     },
     test("rejects an unknown currency") {
       postAccount("A", "10", "ZZZ").flatMap(badRequest("UnknownCurrency"))

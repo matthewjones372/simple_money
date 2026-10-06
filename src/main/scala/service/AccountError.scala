@@ -30,3 +30,5 @@ object AccountError:
   case object IdempotencyKeyIsBlank extends AccountError
 
   case object InvalidPageSize extends AccountError
+
+  case object InvalidCursor extends AccountError

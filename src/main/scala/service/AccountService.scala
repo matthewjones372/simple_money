@@ -1,37 +1,53 @@
 package service
 
-import domain.{AccountNumber, AccountPage, CurrencyAccount, IdempotencyKey, Money, TransferInstruction, TransferOutcome}
+import domain.{
+  AccountId,
+  AccountNumber,
+  AccountPage,
+  CurrencyAccount,
+  IdempotencyKey,
+  Money,
+  TransferInstruction,
+  TransferOutcome
+}
 import zio.*
 import service.AccountError.*
 
 final class AccountService(accounts: AccountStore):
 
-  def getAccount(accountNumber: AccountNumber): IO[AccountError, CurrencyAccount] =
+  def getAccount(id: AccountId): IO[AccountError, CurrencyAccount] =
+    accounts.getAccountById(id)
+
+  def findAccount(accountNumber: AccountNumber): IO[AccountError, CurrencyAccount] =
     accounts.getAccount(accountNumber)
 
   /**
-   * Accounts in account number order, starting after `after`, at most `limit`
-   * of them
+   * Accounts in account number order, starting after the account whose id is
+   * `after`, at most `limit` of them
    */
-  def listAccounts(after: Option[AccountNumber], limit: Int): IO[AccountError, AccountPage] =
+  def listAccounts(after: Option[AccountId], limit: Int): IO[AccountError, AccountPage] =
     for
-      _   <- ZIO.fromEither(validPageSize(limit))
-      all <- accounts.getAllAccounts
+      _      <- ZIO.fromEither(validPageSize(limit))
+      cursor <- ZIO.foreach(after)(id => accounts.getAccountById(id).mapBoth(_ => InvalidCursor, _.accountNumber))
+      all    <- accounts.getAllAccounts
     yield
       val remaining = all
         .sortBy(_.accountNumber.value)
-        .filter(account => after.forall(cursor => account.accountNumber.value > cursor.value))
+        .filter(account => cursor.forall(number => account.accountNumber.value > number.value))
       val page = remaining.take(limit)
-      AccountPage(page, if remaining.sizeIs > limit then page.lastOption.map(_.accountNumber) else None)
+      AccountPage(page, if remaining.sizeIs > limit then page.lastOption.map(_.id) else None)
 
-  def addNewAccount(account: CurrencyAccount): IO[AccountError, Unit] =
+  /** Opens an account with a new id, and returns it */
+  def openAccount(accountNumber: AccountNumber, balance: Money): IO[AccountError, CurrencyAccount] =
     for
-      _ <- ZIO.fromEither(validAccountNumber(account.accountNumber))
-      _ <- ZIO.fromEither(nonNegativeOpeningBalance(account.balance))
-      _ <- ZIO.fromEither(withinMaximum(account.balance.amount))
-      _ <- ZIO.fromEither(fitsMinorUnit(account.balance))
-      _ <- accounts.postAccount(account)
-    yield ()
+      _      <- ZIO.fromEither(validAccountNumber(accountNumber))
+      _      <- ZIO.fromEither(nonNegativeOpeningBalance(balance))
+      _      <- ZIO.fromEither(withinMaximum(balance.amount))
+      _      <- ZIO.fromEither(fitsMinorUnit(balance))
+      id     <- Random.nextUUID.map(AccountId(_))
+      account = CurrencyAccount(id, accountNumber, balance)
+      _      <- accounts.postAccount(account)
+    yield account
 
   def accountTransfer(
     key: IdempotencyKey,
@@ -115,17 +131,20 @@ object AccountService:
 
   val maxPageSize: Int = 1000
 
-  def getAccount(accountNumber: AccountNumber): ZIO[AccountService, AccountError, CurrencyAccount] =
-    ZIO.serviceWithZIO[AccountService](_.getAccount(accountNumber))
+  def getAccount(id: AccountId): ZIO[AccountService, AccountError, CurrencyAccount] =
+    ZIO.serviceWithZIO[AccountService](_.getAccount(id))
+
+  def findAccount(accountNumber: AccountNumber): ZIO[AccountService, AccountError, CurrencyAccount] =
+    ZIO.serviceWithZIO[AccountService](_.findAccount(accountNumber))
 
   def listAccounts(
-    after: Option[AccountNumber],
+    after: Option[AccountId],
     limit: Int
   ): ZIO[AccountService, AccountError, AccountPage] =
     ZIO.serviceWithZIO[AccountService](_.listAccounts(after, limit))
 
-  def addNewAccount(account: CurrencyAccount): ZIO[AccountService, AccountError, Unit] =
-    ZIO.serviceWithZIO[AccountService](_.addNewAccount(account))
+  def openAccount(accountNumber: AccountNumber, balance: Money): ZIO[AccountService, AccountError, CurrencyAccount] =
+    ZIO.serviceWithZIO[AccountService](_.openAccount(accountNumber, balance))
 
   def accountTransfer(
     key: IdempotencyKey,

@@ -1,5 +1,6 @@
 package service
 
+import domain.TestAccounts.accountOf
 import domain.{
   AccountNumber,
   AccountTransfer,
@@ -17,7 +18,7 @@ import AccountError.*
 object AccountStoreSpec extends ZIOSpecDefault:
 
   val gbp: Currency = Currency.getInstance("GBP")
-  val testAccount   = CurrencyAccount(AccountNumber("TEST_ACCOUNT"), Money(100, gbp))
+  val testAccount   = accountOf(AccountNumber("TEST_ACCOUNT"), Money(100, gbp))
 
   def moveTwentyFive(from: CurrencyAccount, to: CurrencyAccount) =
     Right(
@@ -50,8 +51,8 @@ object AccountStoreSpec extends ZIOSpecDefault:
       yield assertTrue(result == Left(AccountAlreadyExists))
     },
     test("should retrieve all accounts") {
-      val account1 = CurrencyAccount(AccountNumber("ACCOUNT_1"), Money(100, gbp))
-      val account2 = CurrencyAccount(AccountNumber("ACCOUNT_2"), Money(200, gbp))
+      val account1 = accountOf(AccountNumber("ACCOUNT_1"), Money(100, gbp))
+      val account2 = accountOf(AccountNumber("ACCOUNT_2"), Money(200, gbp))
 
       for
         _   <- AccountStore.postAccount(account1)
@@ -68,8 +69,8 @@ object AccountStoreSpec extends ZIOSpecDefault:
       yield assertTrue(result == Left(AccountDoesNotExist))
     },
     test("should atomically modify two accounts") {
-      val account1 = CurrencyAccount(AccountNumber("ATOMIC_1"), Money(100, gbp))
-      val account2 = CurrencyAccount(AccountNumber("ATOMIC_2"), Money(50, gbp))
+      val account1 = accountOf(AccountNumber("ATOMIC_1"), Money(100, gbp))
+      val account2 = accountOf(AccountNumber("ATOMIC_2"), Money(50, gbp))
 
       for
         _      <- AccountStore.postAccount(account1)
@@ -89,8 +90,8 @@ object AccountStoreSpec extends ZIOSpecDefault:
       )
     },
     test("should not apply a transfer twice for the same idempotency key") {
-      val account1    = CurrencyAccount(AccountNumber("REPLAY_1"), Money(100, gbp))
-      val account2    = CurrencyAccount(AccountNumber("REPLAY_2"), Money(50, gbp))
+      val account1    = accountOf(AccountNumber("REPLAY_1"), Money(100, gbp))
+      val account2    = accountOf(AccountNumber("REPLAY_2"), Money(50, gbp))
       val instruction = TransferInstruction(account1.accountNumber, account2.accountNumber, BigDecimal(25))
 
       for
@@ -106,8 +107,8 @@ object AccountStoreSpec extends ZIOSpecDefault:
       )
     },
     test("should refuse an idempotency key reused for a different transfer") {
-      val account1 = CurrencyAccount(AccountNumber("REUSE_1"), Money(100, gbp))
-      val account2 = CurrencyAccount(AccountNumber("REUSE_2"), Money(50, gbp))
+      val account1 = accountOf(AccountNumber("REUSE_1"), Money(100, gbp))
+      val account2 = accountOf(AccountNumber("REUSE_2"), Money(50, gbp))
 
       for
         _ <- AccountStore.postAccount(account1)
@@ -129,8 +130,8 @@ object AccountStoreSpec extends ZIOSpecDefault:
       )
     },
     test("should not record a failed transfer, so the same key can be retried") {
-      val account1    = CurrencyAccount(AccountNumber("RETRY_1"), Money(100, gbp))
-      val account2    = CurrencyAccount(AccountNumber("RETRY_2"), Money(50, gbp))
+      val account1    = accountOf(AccountNumber("RETRY_1"), Money(100, gbp))
+      val account2    = accountOf(AccountNumber("RETRY_2"), Money(50, gbp))
       val instruction = TransferInstruction(account1.accountNumber, account2.accountNumber, BigDecimal(25))
 
       for

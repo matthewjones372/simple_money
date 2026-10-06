@@ -32,28 +32,38 @@ sbt test
 | Method | Path | Body |
 |---|---|---|
 | GET | `/api/accounts?limit=&after=` | |
-| GET | `/api/accounts/{accountNumber}` | |
+| GET | `/api/accounts/{id}` | |
+| POST | `/api/accounts/lookup` | `accountNumber` |
 | POST | `/api/accounts` | `accountNumber`, `balance`, `currencyCode` |
 | POST | `/api/accounts/transfer` | `fromAccountNumber`, `toAccountNumber`, `amount`, plus an `Idempotency-Key` header |
+
+Accounts are addressed in URLs by an `id` the service gives them, never by account number, so that account numbers,
+which are personal data, stay out of URLs and the access logs that record them.
 
 ### Create an account
 
 ```
-curl -X POST localhost:8081/api/accounts -H 'Content-Type: application/json' -d '{
+curl -i -X POST localhost:8081/api/accounts -H 'Content-Type: application/json' -d '{
   "accountNumber": "GB29 NWBK 6016 1331 3282 19",
   "balance": 50.00,
   "currencyCode": "GBP"
 }'
 ```
 
+The response is `201 Created`, with the account's address in `Location` and the account in the body:
+
+```
+Location: /api/accounts/6a190ca3-714e-40ed-be8c-f7624330cd43
+```
+
 ```json
-{"message": "Successfully added GB29 NWBK 6016 1331 3282 19 into the datastore"}
+{"id": "6a190ca3-714e-40ed-be8c-f7624330cd43", "accountNumber": "GB29 NWBK 6016 1331 3282 19", "balance": 50.00, "currencyCode": "GBP"}
 ```
 
 `accountNumber` must be 1 to 64 characters, with no spaces at either end and no control characters; spaces inside,
-as IBANs are often written, are fine. `currencyCode` is an ISO 4217 code. The balance cannot be negative, cannot reach 1,000,000,000,000,000 (at most 15
-digits before the decimal point) and cannot have more decimal places than the currency allows, so `50.001` GBP is
-refused. See [Errors](#errors) for what a failure returns.
+as IBANs are often written, are fine. `currencyCode` is an ISO 4217 code. The balance cannot be negative, cannot
+reach 1,000,000,000,000,000 (at most 15 digits before the decimal point) and cannot have more decimal places than
+the currency allows, so `50.001` GBP is refused. See [Errors](#errors) for what a failure returns.
 
 ### List accounts
 
@@ -64,29 +74,33 @@ curl 'localhost:8081/api/accounts?limit=2'
 ```json
 {
   "accounts": [
-    {"accountNumber": "GB29 NWBK 3242 1331 9268 19", "balance": 423.10, "currencyCode": "GBP"},
-    {"accountNumber": "GB29 NWBK 6016 1331 3282 19", "balance": 50.00, "currencyCode": "GBP"}
+    {"id": "0b6f1d7e-5f43-4d0f-9a43-7f5f4f0f6a11", "accountNumber": "GB29 NWBK 3242 1331 9268 19", "balance": 423.10, "currencyCode": "GBP"},
+    {"id": "6a190ca3-714e-40ed-be8c-f7624330cd43", "accountNumber": "GB29 NWBK 6016 1331 3282 19", "balance": 50.00, "currencyCode": "GBP"}
   ],
-  "next": "GB29 NWBK 6016 1331 3282 19"
+  "next": "6a190ca3-714e-40ed-be8c-f7624330cd43"
 }
 ```
 
 Accounts come in account number order, `limit` at a time: 100 by default, at most 1000. When there are more, `next`
-holds the cursor to pass, percent-encoded, as `after` for the following page; on the last page it is `null`. Paging by account number
-rather than by position means accounts added while paging do not shift the pages.
+is the id of the last account on the page, to pass as `after` for the following page; on the last page it is `null`.
+Paging after an account rather than by position means accounts added while paging do not shift the pages.
 
 ### Get one account
 
+By its id, as in the `Location` from creating it:
+
 ```
-curl 'localhost:8081/api/accounts/GB29%20NWBK%206016%201331%203282%2019'
+curl localhost:8081/api/accounts/6a190ca3-714e-40ed-be8c-f7624330cd43
 ```
 
-```json
-{"accountNumber": "GB29 NWBK 6016 1331 3282 19", "balance": 50.00, "currencyCode": "GBP"}
+Or by its number, which goes in the body of a `POST` so that it stays out of the URL:
+
+```
+curl -X POST localhost:8081/api/accounts/lookup -H 'Content-Type: application/json' \
+  -d '{"accountNumber": "GB29 NWBK 6016 1331 3282 19"}'
 ```
 
-An account number with spaces is percent-encoded in the path. An unknown account returns `404` with
-`AccountDoesNotExist`.
+Either returns the account as above, or `404` with `AccountDoesNotExist`.
 
 ### Transfer
 
@@ -122,7 +136,8 @@ Every failure has a JSON body with a stable `error` code to match on and a `mess
 |---|---|---|
 | 400 | `MalformedBody`, `UnsupportedContentType` | The body is not JSON of the right shape |
 | 400 | `MissingHeader`, `MalformedHeader` | A required header, such as `Idempotency-Key`, is missing or unreadable |
-| 400 | `MalformedQueryParam` | A query parameter, such as `limit`, is not a number |
+| 400 | `MalformedQueryParam` | A query parameter is unreadable: `limit` not a number, or `after` not an id |
+| 400 | `InvalidCursor` | `after` is not the id of an account |
 | 400 | `InvalidPageSize` | `limit` is not between 1 and 1000 |
 | 400 | `InvalidAccountNumber` | A new account's number is blank, padded, over 64 characters or has control characters |
 | 400 | `UnknownCurrency` | The currency code is not ISO 4217 |

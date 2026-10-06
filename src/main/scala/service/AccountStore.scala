@@ -1,6 +1,14 @@
 package service
 
-import domain.{AccountNumber, AccountTransfer, CurrencyAccount, IdempotencyKey, TransferInstruction, TransferOutcome}
+import domain.{
+  AccountId,
+  AccountNumber,
+  AccountTransfer,
+  CurrencyAccount,
+  IdempotencyKey,
+  TransferInstruction,
+  TransferOutcome
+}
 import service.AccountError.{AccountAlreadyExists, AccountDoesNotExist, IdempotencyKeyReusedForDifferentTransfer}
 import zio.*
 import zio.stm.{STM, TMap}
@@ -10,6 +18,8 @@ trait AccountStore:
   def getAllAccounts: UIO[Seq[CurrencyAccount]]
 
   def getAccount(accountNumber: AccountNumber): IO[AccountError, CurrencyAccount]
+
+  def getAccountById(id: AccountId): IO[AccountError, CurrencyAccount]
 
   def postAccount(account: CurrencyAccount): IO[AccountError, Unit]
 
@@ -25,14 +35,18 @@ trait AccountStore:
 object AccountStore:
   val layer: ULayer[AccountStore] =
     ZLayer:
-      (TMap.empty[AccountNumber, CurrencyAccount] <*> TMap.empty[IdempotencyKey, CompletedTransfer]).commit
-        .map(InMemoryAccountStore(_, _))
+      (TMap.empty[AccountNumber, CurrencyAccount] <*> TMap.empty[AccountId, AccountNumber] <*>
+        TMap.empty[IdempotencyKey, CompletedTransfer]).commit
+        .map(InMemoryAccountStore(_, _, _))
 
   def getAllAccounts: URIO[AccountStore, Seq[CurrencyAccount]] =
     ZIO.serviceWithZIO[AccountStore](_.getAllAccounts)
 
   def getAccount(accountNumber: AccountNumber): ZIO[AccountStore, AccountError, CurrencyAccount] =
     ZIO.serviceWithZIO[AccountStore](_.getAccount(accountNumber))
+
+  def getAccountById(id: AccountId): ZIO[AccountStore, AccountError, CurrencyAccount] =
+    ZIO.serviceWithZIO[AccountStore](_.getAccountById(id))
 
   def postAccount(account: CurrencyAccount): ZIO[AccountStore, AccountError, Unit] =
     ZIO.serviceWithZIO[AccountStore](_.postAccount(account))
@@ -47,6 +61,7 @@ private final case class CompletedTransfer(instruction: TransferInstruction, tra
 // Completed transfers are kept for the life of the process, as the accounts are
 private case class InMemoryAccountStore(
   accounts: TMap[AccountNumber, CurrencyAccount],
+  accountNumbers: TMap[AccountId, AccountNumber],
   completedTransfers: TMap[IdempotencyKey, CompletedTransfer]
 ) extends AccountStore:
 
@@ -63,13 +78,21 @@ private case class InMemoryAccountStore(
         case Some(account) => ZIO.succeed(account)
         case None          => ZIO.fail(AccountDoesNotExist)
 
+  override def getAccountById(id: AccountId): IO[AccountError, CurrencyAccount] =
+    STM.atomically:
+      for
+        number  <- accountNumbers.get(id).someOrFail(AccountDoesNotExist)
+        account <- accounts.get(number).someOrFail(AccountDoesNotExist)
+      yield account
+
   override def postAccount(account: CurrencyAccount): IO[AccountError, Unit] =
     STM.atomically:
       accounts
         .contains(account.accountNumber)
         .flatMap:
           case true  => STM.fail(AccountAlreadyExists)
-          case false => accounts.put(account.accountNumber, account)
+          case false =>
+            accounts.put(account.accountNumber, account) *> accountNumbers.put(account.id, account.accountNumber)
 
   override def transfer(key: IdempotencyKey, instruction: TransferInstruction)(
     update: (CurrencyAccount, CurrencyAccount) => Either[AccountError, (CurrencyAccount, CurrencyAccount)]

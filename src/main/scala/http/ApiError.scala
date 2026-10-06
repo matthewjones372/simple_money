@@ -63,6 +63,8 @@ object ApiError:
         BadRequest(ErrorResponse("CannotTransferToSameAccount", "An account cannot transfer to itself"))
       case IdempotencyKeyIsBlank =>
         BadRequest(ErrorResponse("IdempotencyKeyIsBlank", "The Idempotency-Key header cannot be blank"))
+      case InvalidCursor =>
+        BadRequest(ErrorResponse("InvalidCursor", "The after cursor is not the id of an account"))
       case InvalidPageSize =>
         BadRequest(ErrorResponse("InvalidPageSize", "The limit must be between 1 and 1000"))
       case AccountDoesNotExist =>

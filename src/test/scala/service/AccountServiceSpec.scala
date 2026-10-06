@@ -1,6 +1,7 @@
 package service
 
-import domain.{AccountNumber, CurrencyAccount, IdempotencyKey, Money, TransferOutcome}
+import domain.TestAccounts.accountOf
+import domain.{AccountId, AccountNumber, CurrencyAccount, IdempotencyKey, Money, TransferOutcome}
 import java.util.Currency
 import zio.*
 import zio.test.*
@@ -23,16 +24,16 @@ object AccountServiceSpec extends ZIOSpecDefault:
   val eur: Currency = Currency.getInstance("EUR")
 
   val accountWithPositiveFunds = AccountNumber("ACCOUNT_WITH_POSITIVE")
-  val positiveAccount          = CurrencyAccount(accountWithPositiveFunds, Money(100, gbp))
+  val positiveAccount          = accountOf(accountWithPositiveFunds, Money(100, gbp))
 
   val accountWithGBP = AccountNumber("ACCOUNT_WITH_GBP")
-  val GBPAccount     = CurrencyAccount(accountWithGBP, Money(200, gbp))
+  val GBPAccount     = accountOf(accountWithGBP, Money(200, gbp))
 
   val accountWithEur = AccountNumber("ACCOUNT_WITH_EUR")
-  val EURAccount     = CurrencyAccount(accountWithEur, Money(503.4, eur))
+  val EURAccount     = accountOf(accountWithEur, Money(503.4, eur))
 
   val accountWithNegativeFunds = AccountNumber("ACCOUNT_WITH_NEGATIVE_FUNDS")
-  val negativeAccount          = CurrencyAccount(accountWithNegativeFunds, Money(-19.99, gbp))
+  val negativeAccount          = accountOf(accountWithNegativeFunds, Money(-19.99, gbp))
 
   def setupAccounts: ZIO[AccountStore, AccountError, Unit] = for
     _ <- AccountStore.postAccount(positiveAccount)
@@ -60,9 +61,29 @@ object AccountServiceSpec extends ZIOSpecDefault:
       yield assertTrue(
         first.accounts.map(_.accountNumber) ==
           Seq(accountWithEur, accountWithGBP, accountWithNegativeFunds),
-        first.next.contains(accountWithNegativeFunds),
+        first.next.contains(negativeAccount.id),
         second.accounts.map(_.accountNumber) == Seq(accountWithPositiveFunds),
         second.next.isEmpty
+      )
+    }.provide(testLayer),
+    test("listAccounts should refuse a cursor that is not an account's id") {
+      for
+        _      <- setupAccounts
+        result <- AccountService.listAccounts(Some(AccountId(java.util.UUID.randomUUID())), 3).either
+      yield assertTrue(result == Left(InvalidCursor))
+    }.provide(testLayer),
+    test("openAccount should give each account its own id, and find it by id or number") {
+      for
+        first    <- AccountService.openAccount(AccountNumber("NEW_1"), Money(1, gbp))
+        second   <- AccountService.openAccount(AccountNumber("NEW_2"), Money(2, gbp))
+        byId     <- AccountService.getAccount(first.id)
+        byNumber <- AccountService.findAccount(AccountNumber("NEW_2"))
+        missing  <- AccountService.getAccount(AccountId(java.util.UUID.randomUUID())).either
+      yield assertTrue(
+        first.id != second.id,
+        byId == first,
+        byNumber == second,
+        missing == Left(AccountDoesNotExist)
       )
     }.provide(testLayer),
     test("listAccounts should refuse a page size outside 1 to 1000") {
@@ -116,12 +137,10 @@ object AccountServiceSpec extends ZIOSpecDefault:
     test("should refuse an opening balance or transfer amount at or above the maximum") {
       val largest = BigDecimal("999999999999999.99")
       for
-        _        <- setupAccounts
-        tooLarge <- AccountService
-                      .addNewAccount(CurrencyAccount(AccountNumber("BIG"), Money(BigDecimal("1e15"), gbp)))
-                      .either
+        _         <- setupAccounts
+        tooLarge  <- AccountService.openAccount(AccountNumber("BIG"), Money(BigDecimal("1e15"), gbp)).either
         justBelow <-
-          AccountService.addNewAccount(CurrencyAccount(AccountNumber("BIG"), Money(largest, gbp))).either
+          AccountService.openAccount(AccountNumber("BIG"), Money(largest, gbp)).either
         transfer   <- accountTransfer(AccountNumber("BIG"), accountWithGBP, BigDecimal("1e15")).either
         bigAccount <- AccountStore.getAccount(AccountNumber("BIG"))
       yield assertTrue(
@@ -135,7 +154,7 @@ object AccountServiceSpec extends ZIOSpecDefault:
       val largest = BigDecimal("999999999999999.99")
       val numbers = (1 to 3).map(n => AccountNumber(s"LARGE_$n"))
       for
-        _        <- ZIO.foreachDiscard(numbers)(n => AccountService.addNewAccount(CurrencyAccount(n, Money(largest, gbp))))
+        _        <- ZIO.foreachDiscard(numbers)(n => AccountService.openAccount(n, Money(largest, gbp)))
         _        <- accountTransfer(numbers(0), numbers(2), largest)
         _        <- accountTransfer(numbers(1), numbers(2), largest)
         _        <- accountTransfer(numbers(2), numbers(0), BigDecimal("0.01"))
@@ -219,8 +238,8 @@ object AccountServiceSpec extends ZIOSpecDefault:
       val toAccount   = AccountNumber("CONCURRENT_TO")
 
       for
-        _        <- AccountStore.postAccount(CurrencyAccount(fromAccount, Money(500, gbp)))
-        _        <- AccountStore.postAccount(CurrencyAccount(toAccount, Money(0, gbp)))
+        _        <- AccountStore.postAccount(accountOf(fromAccount, Money(500, gbp)))
+        _        <- AccountStore.postAccount(accountOf(toAccount, Money(0, gbp)))
         transfers = ZIO.foreachPar(1 to 100) { _ =>
                       accountTransfer(fromAccount, toAccount, BigDecimal(1))
                     }
@@ -237,8 +256,8 @@ object AccountServiceSpec extends ZIOSpecDefault:
       val toAccount   = AccountNumber("RETRIED_TO")
 
       for
-        _        <- AccountStore.postAccount(CurrencyAccount(fromAccount, Money(500, gbp)))
-        _        <- AccountStore.postAccount(CurrencyAccount(toAccount, Money(0, gbp)))
+        _        <- AccountStore.postAccount(accountOf(fromAccount, Money(500, gbp)))
+        _        <- AccountStore.postAccount(accountOf(toAccount, Money(0, gbp)))
         outcomes <- ZIO.foreachPar(1 to 100) { _ =>
                       AccountService.accountTransfer(
                         IdempotencyKey("retried"),
@@ -260,8 +279,8 @@ object AccountServiceSpec extends ZIOSpecDefault:
       val toAccount   = AccountNumber("OVERDRAWN_TO")
 
       for
-        _       <- AccountStore.postAccount(CurrencyAccount(fromAccount, Money(100, gbp)))
-        _       <- AccountStore.postAccount(CurrencyAccount(toAccount, Money(0, gbp)))
+        _       <- AccountStore.postAccount(accountOf(fromAccount, Money(100, gbp)))
+        _       <- AccountStore.postAccount(accountOf(toAccount, Money(0, gbp)))
         results <- ZIO.foreachPar(1 to 250) { _ =>
                      accountTransfer(fromAccount, toAccount, BigDecimal(1)).either
                    }
@@ -281,8 +300,8 @@ object AccountServiceSpec extends ZIOSpecDefault:
         List.fill(200)((first, second, BigDecimal(3))) ++ List.fill(200)((second, first, BigDecimal(2)))
 
       for
-        _        <- AccountStore.postAccount(CurrencyAccount(first, Money(100, gbp)))
-        _        <- AccountStore.postAccount(CurrencyAccount(second, Money(100, gbp)))
+        _        <- AccountStore.postAccount(accountOf(first, Money(100, gbp)))
+        _        <- AccountStore.postAccount(accountOf(second, Money(100, gbp)))
         shuffled <- Random.shuffle(transfers)
         results  <- ZIO.foreachPar(shuffled) { case (from, to, amount) =>
                      accountTransfer(from, to, amount).either.map(result => (from, result))
