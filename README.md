@@ -152,12 +152,13 @@ Every failure has a JSON body with a stable `error` code to match on and a `mess
 The account model is deliberately small:
 
 ```scala
-final case class CurrencyAccount(
-  accountNumber: AccountNumber,
-  balance: CurrencyAmount,
-  currency: Currency
-)
+final case class CurrencyAccount(accountNumber: AccountNumber, balance: Money)
+
+final case class Money(amount: BigDecimal, currency: Currency)
 ```
+
+`Money` only adds, subtracts and compares amounts of the same currency, and knows whether an amount fits its
+currency's minor unit.
 
 ## Possible next steps
 

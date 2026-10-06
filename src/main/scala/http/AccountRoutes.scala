@@ -29,7 +29,7 @@ object Schemas:
   def toAccountResponse(account: CurrencyAccount): AccountResponse =
     AccountResponse(
       account.accountNumber.value,
-      account.balance.value,
+      account.balance.amount,
       account.currency.getCurrencyCode
     )
 
@@ -98,7 +98,7 @@ object AccountRoutes:
                     .attempt(Currency.getInstance(request.currencyCode))
                     .orElseFail(AccountError.UnknownCurrency)
       _ <- AccountTransferService.addNewAccount(
-             CurrencyAccount(AccountNumber(request.accountNumber), CurrencyAmount(request.balance), currency)
+             CurrencyAccount(AccountNumber(request.accountNumber), Money(request.balance, currency))
            )
     yield SuccessResponse(s"Successfully added ${request.accountNumber} into the datastore"))
       .mapError(ApiError.from)
@@ -109,7 +109,7 @@ object AccountRoutes:
         IdempotencyKey(idempotencyKey),
         AccountNumber(request.fromAccountNumber),
         AccountNumber(request.toAccountNumber),
-        CurrencyAmount(request.amount)
+        request.amount
       ))
       .as(
         SuccessResponse(
