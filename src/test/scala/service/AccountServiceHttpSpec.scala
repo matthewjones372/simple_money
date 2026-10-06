@@ -46,13 +46,38 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
   } yield ()
 
   def spec = suite("AccountServiceHttpSpec")(
-    test("listAllAccounts should return a seq of currency accounts") {
+    test("listAccounts should return every account when they fit on one page") {
       for {
-        _       <- setupAccounts
-        results <- AccountTransferService.listAllAccounts
+        _    <- setupAccounts
+        page <- AccountTransferService.listAccounts(None, 100)
       } yield assertTrue(
-        results.size == 4,
-        results.exists(_.accountNumber == accountWithPositiveFunds)
+        page.accounts.size == 4,
+        page.accounts.exists(_.accountNumber == accountWithPositiveFunds),
+        page.next.isEmpty
+      )
+    }.provide(testLayer),
+    test("listAccounts should page through accounts in account number order") {
+      for {
+        _      <- setupAccounts
+        first  <- AccountTransferService.listAccounts(None, 3)
+        second <- AccountTransferService.listAccounts(first.next, 3)
+      } yield assertTrue(
+        first.accounts.map(_.accountNumber) ==
+          Seq(accountWithEur, accountWithGBP, accountWithNegativeFunds),
+        first.next.contains(accountWithNegativeFunds),
+        second.accounts.map(_.accountNumber) == Seq(accountWithPositiveFunds),
+        second.next.isEmpty
+      )
+    }.provide(testLayer),
+    test("listAccounts should refuse a page size outside 1 to 1000") {
+      for {
+        zero    <- AccountTransferService.listAccounts(None, 0).either
+        tooMany <- AccountTransferService.listAccounts(None, 1001).either
+        largest <- AccountTransferService.listAccounts(None, 1000).either
+      } yield assertTrue(
+        zero == Left(InvalidPageSize),
+        tooMany == Left(InvalidPageSize),
+        largest.isRight
       )
     }.provide(testLayer),
     test("transferBetweenAccounts should update both accounts if sufficient funds are present") {

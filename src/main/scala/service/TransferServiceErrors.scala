@@ -9,8 +9,6 @@ object TransferServiceErrors {
 
   case object AccountAlreadyExists extends TransferServiceErrors
 
-  case object FailedToUpdateAccount extends TransferServiceErrors
-
   case object CannotTransferToSameAccount extends TransferServiceErrors
 
   case object CannotTransferToAccountWithDifferentCurrency extends TransferServiceErrors
@@ -26,4 +24,6 @@ object TransferServiceErrors {
   case object IdempotencyKeyReusedForDifferentTransfer extends TransferServiceErrors
 
   case object IdempotencyKeyIsBlank extends TransferServiceErrors
+
+  case object InvalidPageSize extends TransferServiceErrors
 }

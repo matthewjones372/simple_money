@@ -16,6 +16,9 @@ object AccountRoutesSpec extends ZIOSpecDefault {
   def run(request: Request): ZIO[AccountTransferService, Nothing, Response] =
     ZIO.scoped(AccountRoutes.routes.runZIO(request))
 
+  // Request.get(String) takes the string as a path, so a query string or percent-encoding would not be parsed
+  def get(url: String) = run(Request.get(URL.decode(url).toOption.get))
+
   def decode[A](response: Response)(using schema: Schema[A]): Task[A] =
     response.body.asString.flatMap(body =>
       ZIO.fromEither(JsonCodec.jsonDecoder(schema).decodeJson(body)).mapError(new RuntimeException(_))
@@ -43,9 +46,9 @@ object AccountRoutesSpec extends ZIOSpecDefault {
   def transfer(from: String, to: String, amount: String) =
     Random.nextUUID.flatMap(uuid => transferWithKey(uuid.toString, from, to, amount))
 
-  def balances = run(Request.get("/api/accounts"))
-    .flatMap(decode[Seq[AccountResponse]])
-    .map(_.map(account => account.accountNumber -> account.balance).toMap)
+  def balances = get("/api/accounts")
+    .flatMap(decode[AccountPageResponse])
+    .map(_.accounts.map(account => account.accountNumber -> account.balance).toMap)
 
   def assertError(response: Response, status: Status, code: String) =
     for {
@@ -67,12 +70,54 @@ object AccountRoutesSpec extends ZIOSpecDefault {
       for {
         created  <- postAccount("A", "50.00", "GBP")
         message  <- decode[SuccessResponse](created)
-        accounts <- run(Request.get("/api/accounts")).flatMap(decode[Seq[AccountResponse]])
+        accounts <- get("/api/accounts").flatMap(decode[AccountPageResponse])
       } yield assertTrue(
         created.status == Status.Ok,
         message == SuccessResponse("Successfully added A into the datastore"),
-        accounts == Seq(AccountResponse("A", BigDecimal("50.00"), "GBP"))
+        accounts == AccountPageResponse(List(AccountResponse("A", BigDecimal("50.00"), "GBP")), None)
       )
+    },
+    test("gets one account by its number, including one with spaces") {
+      for {
+        _        <- postAccount("GB29 NWBK 6016 1331 3282 19", "50.00", "GBP")
+        response <- get("/api/accounts/GB29%20NWBK%206016%201331%203282%2019")
+        account  <- decode[AccountResponse](response)
+      } yield assertTrue(
+        response.status == Status.Ok,
+        account == AccountResponse("GB29 NWBK 6016 1331 3282 19", BigDecimal("50.00"), "GBP")
+      )
+    },
+    test("returns 404 for an account that does not exist") {
+      get("/api/accounts/NOPE").flatMap(notFound("AccountDoesNotExist"))
+    },
+    test("pages through accounts with limit and after") {
+      for {
+        _      <- ZIO.foreachDiscard(List("C", "A", "E", "B", "D"))(postAccount(_, "1", "GBP"))
+        first  <- get("/api/accounts?limit=2").flatMap(decode[AccountPageResponse])
+        second <-
+          get(s"/api/accounts?limit=2&after=${first.next.get}").flatMap(decode[AccountPageResponse])
+        third <-
+          get(s"/api/accounts?limit=2&after=${second.next.get}").flatMap(decode[AccountPageResponse])
+      } yield assertTrue(
+        first.accounts.map(_.accountNumber) == List("A", "B"),
+        first.next.contains("B"),
+        second.accounts.map(_.accountNumber) == List("C", "D"),
+        third.accounts.map(_.accountNumber) == List("E"),
+        third.next.isEmpty
+      )
+    },
+    test("returns at most 100 accounts when no limit is given") {
+      for {
+        _    <- ZIO.foreachDiscard(1 to 101)(n => postAccount(f"ACC$n%03d", "1", "GBP"))
+        page <- get("/api/accounts").flatMap(decode[AccountPageResponse])
+      } yield assertTrue(page.accounts.size == 100, page.next.contains("ACC100"))
+    },
+    test("refuses a limit outside 1 to 1000, or one that is not a number") {
+      for {
+        zero    <- get("/api/accounts?limit=0").flatMap(badRequest("InvalidPageSize"))
+        tooMany <- get("/api/accounts?limit=1001").flatMap(badRequest("InvalidPageSize"))
+        word    <- get("/api/accounts?limit=ten").flatMap(badRequest("MalformedQueryParam"))
+      } yield zero && tooMany && word
     },
     test("accepts a balance with trailing zeros beyond the currency's minor units") {
       for {

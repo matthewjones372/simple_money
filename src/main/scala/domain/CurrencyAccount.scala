@@ -28,9 +28,10 @@ final case class CurrencyAmount(value: BigDecimal) {
 
   def >=(that: CurrencyAmount): Boolean = this.value >= that.value
 
-  def >(that: CurrencyAmount): Boolean = this.value > that.value
 }
 
-object CurrencyAmount {
-  def fromBigDecimal(value: BigDecimal): CurrencyAmount = CurrencyAmount(value)
-}
+/**
+ * One page of accounts, in account number order; `next` is the cursor for the
+ * following page, if there is one
+ */
+final case class AccountPage(accounts: Seq[CurrencyAccount], next: Option[AccountNumber])

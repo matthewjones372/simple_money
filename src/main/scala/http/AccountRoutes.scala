@@ -4,7 +4,7 @@ import domain.*
 import service.*
 import zio.*
 import zio.http.*
-import zio.http.codec.HeaderCodec
+import zio.http.codec.{HeaderCodec, HttpCodec, PathCodec}
 import zio.http.endpoint.*
 import zio.http.endpoint.openapi.*
 import zio.schema.{DeriveSchema, Schema}
@@ -12,15 +12,15 @@ import zio.schema.{DeriveSchema, Schema}
 import java.util.Currency
 
 case class AccountResponse(accountNumber: String, balance: BigDecimal, currencyCode: String)
+case class AccountPageResponse(accounts: List[AccountResponse], next: Option[String])
 case class PostNewAccountRequest(accountNumber: String, balance: BigDecimal, currencyCode: String)
 case class TransferRequest(fromAccountNumber: String, toAccountNumber: String, amount: BigDecimal)
 case class ErrorResponse(error: String, message: String)
 case class SuccessResponse(message: String)
 
 object Schemas:
-  given accountResponseSchema: Schema[AccountResponse]         = DeriveSchema.gen[AccountResponse]
-  given accountResponseSeqSchema: Schema[Seq[AccountResponse]] =
-    Schema.list[AccountResponse].transform(_.toSeq, _.toList)
+  given accountResponseSchema: Schema[AccountResponse]          = DeriveSchema.gen[AccountResponse]
+  given accountPageResponseSchema: Schema[AccountPageResponse]  = DeriveSchema.gen[AccountPageResponse]
   given postAccountRequestSchema: Schema[PostNewAccountRequest] = DeriveSchema.gen[PostNewAccountRequest]
   given transferRequestSchema: Schema[TransferRequest]          = DeriveSchema.gen[TransferRequest]
   given errorResponseSchema: Schema[ErrorResponse]              = DeriveSchema.gen[ErrorResponse]
@@ -33,12 +33,27 @@ object Schemas:
       account.currency.getCurrencyCode
     )
 
+  def toAccountPageResponse(page: AccountPage): AccountPageResponse =
+    AccountPageResponse(page.accounts.map(toAccountResponse).toList, page.next.map(_.value))
+
 object AccountRoutes:
   import Schemas.{*, given}
 
+  private val defaultPageSize = 100
+
   private val getAccountsEndpoint =
     Endpoint(RoutePattern.GET / "api" / "accounts")
-      .out[Seq[AccountResponse]]
+      .query(HttpCodec.query[Int]("limit").optional)
+      .query(HttpCodec.query[String]("after").optional)
+      .out[AccountPageResponse]
+      .outErrors[ApiError](ApiError.badRequest, ApiError.notFound)
+      .copy(codecError = ApiError.requestCodecError)
+
+  private val getAccountEndpoint =
+    Endpoint(RoutePattern.GET / "api" / "accounts" / PathCodec.string("accountNumber"))
+      .out[AccountResponse]
+      .outErrors[ApiError](ApiError.badRequest, ApiError.notFound)
+      .copy(codecError = ApiError.requestCodecError)
 
   private val postAccountEndpoint =
     Endpoint(RoutePattern.POST / "api" / "accounts")
@@ -60,12 +75,22 @@ object AccountRoutes:
       title = "Simple Money API",
       version = "1.0.0",
       getAccountsEndpoint,
+      getAccountEndpoint,
       postAccountEndpoint,
       transferEndpoint
     )
 
-  private val getAccounts = getAccountsEndpoint.implement: _ =>
-    AccountTransferService.listAllAccounts.map(_.map(toAccountResponse))
+  private val getAccounts = getAccountsEndpoint.implement: (limit, after) =>
+    AccountTransferService
+      .listAccounts(after.map(AccountNumber(_)), limit.getOrElse(defaultPageSize))
+      .map(toAccountPageResponse)
+      .mapError(ApiError.from)
+
+  private val getAccount = getAccountEndpoint.implement: accountNumber =>
+    AccountTransferService
+      .getAccount(AccountNumber(accountNumber))
+      .map(toAccountResponse)
+      .mapError(ApiError.from)
 
   private val postAccount = postAccountEndpoint.implement: request =>
     (for
@@ -94,4 +119,4 @@ object AccountRoutes:
       .mapError(ApiError.from)
 
   val routes: Routes[AccountTransferService, Response] =
-    Routes(getAccounts, postAccount, transfer)
+    Routes(getAccounts, getAccount, postAccount, transfer)

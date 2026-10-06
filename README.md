@@ -31,7 +31,8 @@ sbt test
 
 | Method | Path | Body |
 |---|---|---|
-| GET | `/api/accounts` | |
+| GET | `/api/accounts?limit=&after=` | |
+| GET | `/api/accounts/{accountNumber}` | |
 | POST | `/api/accounts` | `accountNumber`, `balance`, `currencyCode` |
 | POST | `/api/accounts/transfer` | `fromAccountNumber`, `toAccountNumber`, `amount`, plus an `Idempotency-Key` header |
 
@@ -55,15 +56,35 @@ allows, so `50.001` GBP is refused. See [Errors](#errors) for what a failure ret
 ### List accounts
 
 ```
-curl localhost:8081/api/accounts
+curl 'localhost:8081/api/accounts?limit=2'
 ```
 
 ```json
-[
-  {"accountNumber": "GB29 NWBK 6016 1331 3282 19", "balance": 50.00, "currencyCode": "GBP"},
-  {"accountNumber": "GB29 NWBK 3242 1331 9268 19", "balance": 423.10, "currencyCode": "GBP"}
-]
+{
+  "accounts": [
+    {"accountNumber": "GB29 NWBK 3242 1331 9268 19", "balance": 423.10, "currencyCode": "GBP"},
+    {"accountNumber": "GB29 NWBK 6016 1331 3282 19", "balance": 50.00, "currencyCode": "GBP"}
+  ],
+  "next": "GB29 NWBK 6016 1331 3282 19"
+}
 ```
+
+Accounts come in account number order, `limit` at a time: 100 by default, at most 1000. When there are more, `next`
+holds the cursor to pass, percent-encoded, as `after` for the following page; on the last page it is `null`. Paging by account number
+rather than by position means accounts added while paging do not shift the pages.
+
+### Get one account
+
+```
+curl 'localhost:8081/api/accounts/GB29%20NWBK%206016%201331%203282%2019'
+```
+
+```json
+{"accountNumber": "GB29 NWBK 6016 1331 3282 19", "balance": 50.00, "currencyCode": "GBP"}
+```
+
+An account number with spaces is percent-encoded in the path. An unknown account returns `404` with
+`AccountDoesNotExist`.
 
 ### Transfer
 
@@ -99,13 +120,15 @@ Every failure has a JSON body with a stable `error` code to match on and a `mess
 |---|---|---|
 | 400 | `MalformedBody`, `UnsupportedContentType` | The body is not JSON of the right shape |
 | 400 | `MissingHeader`, `MalformedHeader` | A required header, such as `Idempotency-Key`, is missing or unreadable |
+| 400 | `MalformedQueryParam` | A query parameter, such as `limit`, is not a number |
+| 400 | `InvalidPageSize` | `limit` is not between 1 and 1000 |
 | 400 | `UnknownCurrency` | The currency code is not ISO 4217 |
 | 400 | `CannotOpenAccountWithNegativeBalance` | A new account has a negative balance |
 | 400 | `AmountHasTooManyDecimalPlaces` | An amount is finer than its currency's minor unit |
 | 400 | `CannotTransferNegativeAmount` | A transfer amount is zero or less |
 | 400 | `CannotTransferToSameAccount` | A transfer names the same account twice |
 | 400 | `IdempotencyKeyIsBlank` | The `Idempotency-Key` header is blank |
-| 404 | `AccountDoesNotExist` | An account in a transfer does not exist |
+| 404 | `AccountDoesNotExist` | The account, or an account in a transfer, does not exist |
 | 409 | `AccountAlreadyExists` | A new account's number is already taken |
 | 409 | `IdempotencyKeyReusedForDifferentTransfer` | An `Idempotency-Key` was already used for a different transfer |
 | 422 | `AccountHasInsufficientFunds` | The source account cannot cover the transfer |

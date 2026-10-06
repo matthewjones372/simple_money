@@ -1,6 +1,14 @@
 package service
 
-import domain.{AccountNumber, CurrencyAccount, CurrencyAmount, IdempotencyKey, TransferInstruction, TransferOutcome}
+import domain.{
+  AccountNumber,
+  AccountPage,
+  CurrencyAccount,
+  CurrencyAmount,
+  IdempotencyKey,
+  TransferInstruction,
+  TransferOutcome
+}
 import zio._
 import service.TransferServiceErrors._
 
@@ -8,8 +16,23 @@ import java.util.Currency
 
 final class AccountTransferService(accounts: AccountService):
 
-  def listAllAccounts: UIO[Seq[CurrencyAccount]] =
-    accounts.getAllAccounts
+  def getAccount(accountNumber: AccountNumber): IO[TransferServiceErrors, CurrencyAccount] =
+    accounts.getAccount(accountNumber)
+
+  /**
+   * Accounts in account number order, starting after `after`, at most `limit`
+   * of them
+   */
+  def listAccounts(after: Option[AccountNumber], limit: Int): IO[TransferServiceErrors, AccountPage] =
+    for
+      _   <- ZIO.fromEither(validPageSize(limit))
+      all <- accounts.getAllAccounts
+    yield
+      val remaining = all
+        .sortBy(_.accountNumber.value)
+        .filter(account => after.forall(cursor => account.accountNumber.value > cursor.value))
+      val page = remaining.take(limit)
+      AccountPage(page, if remaining.sizeIs > limit then page.lastOption.map(_.accountNumber) else None)
 
   def addNewAccount(account: CurrencyAccount): IO[TransferServiceErrors, Unit] =
     for
@@ -53,6 +76,10 @@ final class AccountTransferService(accounts: AccountService):
   private def addBalance(toAccount: CurrencyAccount, transferAmount: CurrencyAmount): CurrencyAccount =
     toAccount.copy(balance = toAccount.balance + transferAmount)
 
+  private def validPageSize(limit: Int): Either[TransferServiceErrors, Unit] =
+    if limit >= 1 && limit <= AccountTransferService.maxPageSize then Right(())
+    else Left(InvalidPageSize)
+
   private def nonNegativeTransferAmount(transferAmount: CurrencyAmount): Either[TransferServiceErrors, Unit] =
     if transferAmount.value > 0 then Right(())
     else Left(CannotTransferNegativeAmount)
@@ -92,8 +119,16 @@ object AccountTransferService:
   val layer: URLayer[AccountService, AccountTransferService] =
     ZLayer.fromFunction(AccountTransferService(_))
 
-  def listAllAccounts: URIO[AccountTransferService, Seq[CurrencyAccount]] =
-    ZIO.serviceWithZIO[AccountTransferService](_.listAllAccounts)
+  val maxPageSize: Int = 1000
+
+  def getAccount(accountNumber: AccountNumber): ZIO[AccountTransferService, TransferServiceErrors, CurrencyAccount] =
+    ZIO.serviceWithZIO[AccountTransferService](_.getAccount(accountNumber))
+
+  def listAccounts(
+    after: Option[AccountNumber],
+    limit: Int
+  ): ZIO[AccountTransferService, TransferServiceErrors, AccountPage] =
+    ZIO.serviceWithZIO[AccountTransferService](_.listAccounts(after, limit))
 
   def addNewAccount(account: CurrencyAccount): ZIO[AccountTransferService, TransferServiceErrors, Unit] =
     ZIO.serviceWithZIO[AccountTransferService](_.addNewAccount(account))
