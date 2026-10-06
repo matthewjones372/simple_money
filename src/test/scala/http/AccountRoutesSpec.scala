@@ -14,7 +14,7 @@ object AccountRoutesSpec extends ZIOSpecDefault {
     AccountService.layer >>> AccountTransferService.layer
 
   def run(request: Request): ZIO[AccountTransferService, Nothing, Response] =
-    AccountRoutes.routes.runZIO(request)
+    ZIO.scoped(AccountRoutes.routes.runZIO(request))
 
   def decode[A](response: Response)(using schema: Schema[A]): Task[A] =
     response.body.asString.flatMap(body =>
@@ -194,7 +194,7 @@ object AccountRoutesSpec extends ZIOSpecDefault {
       assertTrue(
         spec.contains("ErrorResponse"),
         spec.contains("TransferRequest"),
-        spec.contains("Idempotency-Key"),
+        spec.toLowerCase.contains("idempotency-key"),
         spec.contains("\"404\""),
         spec.contains("\"409\""),
         spec.contains("\"422\"")

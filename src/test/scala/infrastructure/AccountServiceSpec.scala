@@ -76,8 +76,8 @@ object AccountServiceSpec extends ZIOSpecDefault {
       val account2 = CurrencyAccount(AccountNumber("ATOMIC_2"), CurrencyAmount(50), gbp)
 
       for {
-        _ <- AccountService.postAccount(account1)
-        _ <- AccountService.postAccount(account2)
+        _      <- AccountService.postAccount(account1)
+        _      <- AccountService.postAccount(account2)
         result <- AccountService.transfer(
                     IdempotencyKey("atomic"),
                     TransferInstruction(account1.accountNumber, account2.accountNumber, CurrencyAmount(25))
@@ -138,8 +138,8 @@ object AccountServiceSpec extends ZIOSpecDefault {
       val instruction = TransferInstruction(account1.accountNumber, account2.accountNumber, CurrencyAmount(25))
 
       for {
-        _ <- AccountService.postAccount(account1)
-        _ <- AccountService.postAccount(account2)
+        _      <- AccountService.postAccount(account1)
+        _      <- AccountService.postAccount(account2)
         failed <- AccountService
                     .transfer(IdempotencyKey("retry"), instruction)((_, _) => Left(AccountHasInsufficientFunds))
                     .either
