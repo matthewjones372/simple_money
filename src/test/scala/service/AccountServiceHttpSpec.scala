@@ -6,7 +6,7 @@ import zio._
 import zio.test._
 import zio.test.Assertion._
 import service.AccountService
-import service.TransferServiceErrors._
+import service.AccountError._
 
 object AccountServiceHttpSpec extends ZIOSpecDefault {
 
@@ -18,7 +18,7 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
     from: AccountNumber,
     to: AccountNumber,
     amount: CurrencyAmount
-  ): ZIO[AccountTransferService, TransferServiceErrors, TransferOutcome] =
+  ): ZIO[AccountTransferService, AccountError, TransferOutcome] =
     Random.nextUUID.flatMap(uuid =>
       AccountTransferService.accountTransfer(IdempotencyKey(uuid.toString), from, to, amount)
     )
@@ -38,7 +38,7 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
   val accountWithNegativeFunds = AccountNumber("ACCOUNT_WITH_NEGATIVE_FUNDS")
   val negativeAccount          = CurrencyAccount(accountWithNegativeFunds, CurrencyAmount(-19.99), gbp)
 
-  def setupAccounts: ZIO[AccountService, TransferServiceErrors, Unit] = for {
+  def setupAccounts: ZIO[AccountService, AccountError, Unit] = for {
     _ <- AccountService.postAccount(positiveAccount)
     _ <- AccountService.postAccount(GBPAccount)
     _ <- AccountService.postAccount(EURAccount)
@@ -144,7 +144,7 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
         _      <- setupAccounts
         result <-
           accountTransfer(accountWithGBP, accountWithPositiveFunds, CurrencyAmount(-100)).either
-      } yield assertTrue(result == Left(CannotTransferNegativeAmount))
+      } yield assertTrue(result == Left(TransferAmountNotPositive))
     }.provide(testLayer),
     test("should not transfer funds when there is no account to transfer to") {
       val nonExistingAccount = AccountNumber("SOME_NON_EXISTING_ACCOUNT")

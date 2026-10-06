@@ -96,7 +96,7 @@ object AccountRoutes:
     (for
       currency <- ZIO
                     .attempt(Currency.getInstance(request.currencyCode))
-                    .orElseFail(TransferServiceErrors.UnknownCurrency)
+                    .orElseFail(AccountError.UnknownCurrency)
       _ <- AccountTransferService.addNewAccount(
              CurrencyAccount(AccountNumber(request.accountNumber), CurrencyAmount(request.balance), currency)
            )
@@ -104,7 +104,7 @@ object AccountRoutes:
       .mapError(ApiError.from)
 
   private val transfer = transferEndpoint.implement: (idempotencyKey, request) =>
-    (ZIO.fail(TransferServiceErrors.IdempotencyKeyIsBlank).when(idempotencyKey.isBlank) *>
+    (ZIO.fail(AccountError.IdempotencyKeyIsBlank).when(idempotencyKey.isBlank) *>
       AccountTransferService.accountTransfer(
         IdempotencyKey(idempotencyKey),
         AccountNumber(request.fromAccountNumber),

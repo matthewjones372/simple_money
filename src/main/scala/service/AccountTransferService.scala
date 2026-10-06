@@ -10,20 +10,20 @@ import domain.{
   TransferOutcome
 }
 import zio._
-import service.TransferServiceErrors._
+import service.AccountError._
 
 import java.util.Currency
 
 final class AccountTransferService(accounts: AccountService):
 
-  def getAccount(accountNumber: AccountNumber): IO[TransferServiceErrors, CurrencyAccount] =
+  def getAccount(accountNumber: AccountNumber): IO[AccountError, CurrencyAccount] =
     accounts.getAccount(accountNumber)
 
   /**
    * Accounts in account number order, starting after `after`, at most `limit`
    * of them
    */
-  def listAccounts(after: Option[AccountNumber], limit: Int): IO[TransferServiceErrors, AccountPage] =
+  def listAccounts(after: Option[AccountNumber], limit: Int): IO[AccountError, AccountPage] =
     for
       _   <- ZIO.fromEither(validPageSize(limit))
       all <- accounts.getAllAccounts
@@ -34,7 +34,7 @@ final class AccountTransferService(accounts: AccountService):
       val page = remaining.take(limit)
       AccountPage(page, if remaining.sizeIs > limit then page.lastOption.map(_.accountNumber) else None)
 
-  def addNewAccount(account: CurrencyAccount): IO[TransferServiceErrors, Unit] =
+  def addNewAccount(account: CurrencyAccount): IO[AccountError, Unit] =
     for
       _ <- ZIO.fromEither(nonNegativeOpeningBalance(account.balance))
       _ <- ZIO.fromEither(fitsCurrency(account.balance, account.currency))
@@ -46,10 +46,10 @@ final class AccountTransferService(accounts: AccountService):
     fromAccountNumber: AccountNumber,
     toAccountNumber: AccountNumber,
     transferAmount: CurrencyAmount
-  ): IO[TransferServiceErrors, TransferOutcome] =
+  ): IO[AccountError, TransferOutcome] =
     val instruction = TransferInstruction(fromAccountNumber, toAccountNumber, transferAmount)
     for
-      _       <- ZIO.fromEither(nonNegativeTransferAmount(transferAmount))
+      _       <- ZIO.fromEither(positiveTransferAmount(transferAmount))
       _       <- ZIO.fromEither(areDifferentAccounts(fromAccountNumber, toAccountNumber))
       outcome <- accounts.transfer(key, instruction): (fromAccount, toAccount) =>
                    for
@@ -76,20 +76,20 @@ final class AccountTransferService(accounts: AccountService):
   private def addBalance(toAccount: CurrencyAccount, transferAmount: CurrencyAmount): CurrencyAccount =
     toAccount.copy(balance = toAccount.balance + transferAmount)
 
-  private def validPageSize(limit: Int): Either[TransferServiceErrors, Unit] =
+  private def validPageSize(limit: Int): Either[AccountError, Unit] =
     if limit >= 1 && limit <= AccountTransferService.maxPageSize then Right(())
     else Left(InvalidPageSize)
 
-  private def nonNegativeTransferAmount(transferAmount: CurrencyAmount): Either[TransferServiceErrors, Unit] =
+  private def positiveTransferAmount(transferAmount: CurrencyAmount): Either[AccountError, Unit] =
     if transferAmount.value > 0 then Right(())
-    else Left(CannotTransferNegativeAmount)
+    else Left(TransferAmountNotPositive)
 
-  private def nonNegativeOpeningBalance(balance: CurrencyAmount): Either[TransferServiceErrors, Unit] =
+  private def nonNegativeOpeningBalance(balance: CurrencyAmount): Either[AccountError, Unit] =
     if balance.value >= 0 then Right(())
     else Left(CannotOpenAccountWithNegativeBalance)
 
   // Currencies without minor units, such as XAU, report -1 and are not limited
-  private def fitsCurrency(amount: CurrencyAmount, currency: Currency): Either[TransferServiceErrors, Unit] =
+  private def fitsCurrency(amount: CurrencyAmount, currency: Currency): Either[AccountError, Unit] =
     val fractionDigits = currency.getDefaultFractionDigits
     if fractionDigits < 0 || amount.value.bigDecimal.stripTrailingZeros.scale <= fractionDigits then Right(())
     else Left(AmountHasTooManyDecimalPlaces)
@@ -97,21 +97,21 @@ final class AccountTransferService(accounts: AccountService):
   private def hasSufficientBalance(
     account: CurrencyAccount,
     transferAmount: CurrencyAmount
-  ): Either[TransferServiceErrors, Unit] =
+  ): Either[AccountError, Unit] =
     if account.balance >= transferAmount then Right(())
     else Left(AccountHasInsufficientFunds)
 
   private def haveSameCurrency(
     fromAccount: CurrencyAccount,
     toAccount: CurrencyAccount
-  ): Either[TransferServiceErrors, Unit] =
+  ): Either[AccountError, Unit] =
     if fromAccount.currency.equals(toAccount.currency) then Right(())
     else Left(CannotTransferToAccountWithDifferentCurrency)
 
   private def areDifferentAccounts(
     fromAccountNumber: AccountNumber,
     toAccountNumber: AccountNumber
-  ): Either[TransferServiceErrors, Unit] =
+  ): Either[AccountError, Unit] =
     if fromAccountNumber != toAccountNumber then Right(())
     else Left(CannotTransferToSameAccount)
 
@@ -121,16 +121,16 @@ object AccountTransferService:
 
   val maxPageSize: Int = 1000
 
-  def getAccount(accountNumber: AccountNumber): ZIO[AccountTransferService, TransferServiceErrors, CurrencyAccount] =
+  def getAccount(accountNumber: AccountNumber): ZIO[AccountTransferService, AccountError, CurrencyAccount] =
     ZIO.serviceWithZIO[AccountTransferService](_.getAccount(accountNumber))
 
   def listAccounts(
     after: Option[AccountNumber],
     limit: Int
-  ): ZIO[AccountTransferService, TransferServiceErrors, AccountPage] =
+  ): ZIO[AccountTransferService, AccountError, AccountPage] =
     ZIO.serviceWithZIO[AccountTransferService](_.listAccounts(after, limit))
 
-  def addNewAccount(account: CurrencyAccount): ZIO[AccountTransferService, TransferServiceErrors, Unit] =
+  def addNewAccount(account: CurrencyAccount): ZIO[AccountTransferService, AccountError, Unit] =
     ZIO.serviceWithZIO[AccountTransferService](_.addNewAccount(account))
 
   def accountTransfer(
@@ -138,7 +138,7 @@ object AccountTransferService:
     fromAccountNumber: AccountNumber,
     toAccountNumber: AccountNumber,
     transferAmount: CurrencyAmount
-  ): ZIO[AccountTransferService, TransferServiceErrors, TransferOutcome] =
+  ): ZIO[AccountTransferService, AccountError, TransferOutcome] =
     ZIO.serviceWithZIO[AccountTransferService](
       _.accountTransfer(key, fromAccountNumber, toAccountNumber, transferAmount)
     )

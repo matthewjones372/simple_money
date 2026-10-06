@@ -14,7 +14,7 @@ import zio._
 import zio.test._
 import zio.test.Assertion._
 import service.AccountService
-import service.TransferServiceErrors._
+import service.AccountError._
 
 object AccountServiceSpec extends ZIOSpecDefault {
 
