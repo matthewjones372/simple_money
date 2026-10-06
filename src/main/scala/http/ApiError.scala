@@ -48,6 +48,8 @@ object ApiError:
         BadRequest(
           ErrorResponse("AmountHasTooManyDecimalPlaces", "The amount has more decimal places than its currency allows")
         )
+      case AmountTooLarge =>
+        BadRequest(ErrorResponse("AmountTooLarge", "The amount must be less than 1,000,000,000,000,000"))
       case TransferAmountNotPositive =>
         BadRequest(ErrorResponse("TransferAmountNotPositive", "The amount to transfer must be more than zero"))
       case CannotTransferToSameAccount =>

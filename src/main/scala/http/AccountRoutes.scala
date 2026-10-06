@@ -33,6 +33,15 @@ object Schemas:
       account.currency.getCurrencyCode
     )
 
+  /**
+   * JSON such as 1e3 reads as a BigDecimal with a negative scale, which would
+   * be written back as 1E+3, so amounts are given a scale of at least zero.
+   * Amounts over the maximum are left alone, to be refused, since rescaling one
+   * such as 1e999999999 overflows.
+   */
+  def plain(amount: BigDecimal): BigDecimal =
+    if amount.scale < 0 && Money.isWithinMaximum(amount) then amount.setScale(0) else amount
+
   def toAccountPageResponse(page: AccountPage): AccountPageResponse =
     AccountPageResponse(page.accounts.map(toAccountResponse).toList, page.next.map(_.value))
 
@@ -98,7 +107,7 @@ object AccountRoutes:
                     .attempt(Currency.getInstance(request.currencyCode))
                     .orElseFail(AccountError.UnknownCurrency)
       _ <- AccountTransferService.addNewAccount(
-             CurrencyAccount(AccountNumber(request.accountNumber), Money(request.balance, currency))
+             CurrencyAccount(AccountNumber(request.accountNumber), Money(plain(request.balance), currency))
            )
     yield SuccessResponse(s"Successfully added ${request.accountNumber} into the datastore"))
       .mapError(ApiError.from)
@@ -109,11 +118,11 @@ object AccountRoutes:
         IdempotencyKey(idempotencyKey),
         AccountNumber(request.fromAccountNumber),
         AccountNumber(request.toAccountNumber),
-        request.amount
+        plain(request.amount)
       ))
       .as(
         SuccessResponse(
-          s"${request.amount} has been transferred from ${request.fromAccountNumber} to ${request.toAccountNumber}"
+          s"${plain(request.amount)} has been transferred from ${request.fromAccountNumber} to ${request.toAccountNumber}"
         )
       )
       .mapError(ApiError.from)

@@ -19,6 +19,8 @@ object AccountError:
 
   case object AmountHasTooManyDecimalPlaces extends AccountError
 
+  case object AmountTooLarge extends AccountError
+
   case object UnknownCurrency extends AccountError
 
   case object IdempotencyKeyReusedForDifferentTransfer extends AccountError

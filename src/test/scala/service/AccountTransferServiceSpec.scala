@@ -115,6 +115,40 @@ object AccountTransferServiceSpec extends ZIOSpecDefault:
         )
       )
     }.provide(testLayer),
+    test("should refuse an opening balance or transfer amount at or above the maximum") {
+      val largest = BigDecimal("999999999999999.99")
+      for
+        _        <- setupAccounts
+        tooLarge <- AccountTransferService
+                      .addNewAccount(CurrencyAccount(AccountNumber("BIG"), Money(BigDecimal("1e15"), gbp)))
+                      .either
+        justBelow <-
+          AccountTransferService.addNewAccount(CurrencyAccount(AccountNumber("BIG"), Money(largest, gbp))).either
+        transfer   <- accountTransfer(AccountNumber("BIG"), accountWithGBP, BigDecimal("1e15")).either
+        bigAccount <- AccountService.getAccount(AccountNumber("BIG"))
+      yield assertTrue(
+        tooLarge == Left(AmountTooLarge),
+        justBelow.isRight,
+        transfer == Left(AmountTooLarge),
+        bigAccount.balance.amount == largest
+      )
+    }.provide(testLayer),
+    test("should keep every penny when balances grow past the maximum") {
+      val largest = BigDecimal("999999999999999.99")
+      val numbers = (1 to 3).map(n => AccountNumber(s"LARGE_$n"))
+      for
+        _ <- ZIO.foreachDiscard(numbers)(n =>
+               AccountTransferService.addNewAccount(CurrencyAccount(n, Money(largest, gbp)))
+             )
+        _        <- accountTransfer(numbers(0), numbers(2), largest)
+        _        <- accountTransfer(numbers(1), numbers(2), largest)
+        _        <- accountTransfer(numbers(2), numbers(0), BigDecimal("0.01"))
+        balances <- ZIO.foreach(numbers)(n => AccountService.getAccount(n).map(_.balance.amount))
+      yield assertTrue(
+        balances == Seq(BigDecimal("0.01"), BigDecimal(0), BigDecimal("2999999999999999.96")),
+        balances.sum == largest * 3
+      )
+    }.provide(testLayer),
     test("should allow multiple payments") {
       for
         _               <- setupAccounts
