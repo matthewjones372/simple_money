@@ -1,7 +1,7 @@
 package http
 
-import service.TransferServiceErrors
-import service.TransferServiceErrors.*
+import service.AccountError
+import service.AccountError.*
 import zio.http.Status
 import zio.http.codec.{HttpCodec, HttpCodecError, HttpCodecType}
 import zio.schema.Schema
@@ -36,7 +36,7 @@ object ApiError:
   val unprocessableEntity: HttpCodec[HttpCodecType.Status & HttpCodecType.Content, UnprocessableEntity] =
     HttpCodec.error[UnprocessableEntity](Status.UnprocessableEntity)
 
-  def from(error: TransferServiceErrors): ApiError =
+  def from(error: AccountError): ApiError =
     error match
       case UnknownCurrency =>
         BadRequest(ErrorResponse("UnknownCurrency", "The currency code is not an ISO 4217 code"))
@@ -48,8 +48,8 @@ object ApiError:
         BadRequest(
           ErrorResponse("AmountHasTooManyDecimalPlaces", "The amount has more decimal places than its currency allows")
         )
-      case CannotTransferNegativeAmount =>
-        BadRequest(ErrorResponse("CannotTransferNegativeAmount", "The amount to transfer must be more than zero"))
+      case TransferAmountNotPositive =>
+        BadRequest(ErrorResponse("TransferAmountNotPositive", "The amount to transfer must be more than zero"))
       case CannotTransferToSameAccount =>
         BadRequest(ErrorResponse("CannotTransferToSameAccount", "An account cannot transfer to itself"))
       case IdempotencyKeyIsBlank =>

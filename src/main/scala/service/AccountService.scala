@@ -1,11 +1,7 @@
 package service
 
 import domain.{AccountNumber, AccountTransfer, CurrencyAccount, IdempotencyKey, TransferInstruction, TransferOutcome}
-import service.TransferServiceErrors.{
-  AccountAlreadyExists,
-  AccountDoesNotExist,
-  IdempotencyKeyReusedForDifferentTransfer
-}
+import service.AccountError.{AccountAlreadyExists, AccountDoesNotExist, IdempotencyKeyReusedForDifferentTransfer}
 import zio.*
 import zio.stm.{STM, TMap}
 
@@ -13,9 +9,9 @@ trait AccountService:
 
   def getAllAccounts: UIO[Seq[CurrencyAccount]]
 
-  def getAccount(accountNumber: AccountNumber): IO[TransferServiceErrors, CurrencyAccount]
+  def getAccount(accountNumber: AccountNumber): IO[AccountError, CurrencyAccount]
 
-  def postAccount(account: CurrencyAccount): IO[TransferServiceErrors, Unit]
+  def postAccount(account: CurrencyAccount): IO[AccountError, Unit]
 
   /**
    * Applies `update` to both accounts in one transaction and records the
@@ -23,8 +19,8 @@ trait AccountService:
    * returns the recorded transfer without applying it again.
    */
   def transfer(key: IdempotencyKey, instruction: TransferInstruction)(
-    update: (CurrencyAccount, CurrencyAccount) => Either[TransferServiceErrors, (CurrencyAccount, CurrencyAccount)]
-  ): IO[TransferServiceErrors, TransferOutcome]
+    update: (CurrencyAccount, CurrencyAccount) => Either[AccountError, (CurrencyAccount, CurrencyAccount)]
+  ): IO[AccountError, TransferOutcome]
 
 object AccountService:
   val layer: ULayer[AccountService] =
@@ -35,15 +31,15 @@ object AccountService:
   def getAllAccounts: URIO[AccountService, Seq[CurrencyAccount]] =
     ZIO.serviceWithZIO[AccountService](_.getAllAccounts)
 
-  def getAccount(accountNumber: AccountNumber): ZIO[AccountService, TransferServiceErrors, CurrencyAccount] =
+  def getAccount(accountNumber: AccountNumber): ZIO[AccountService, AccountError, CurrencyAccount] =
     ZIO.serviceWithZIO[AccountService](_.getAccount(accountNumber))
 
-  def postAccount(account: CurrencyAccount): ZIO[AccountService, TransferServiceErrors, Unit] =
+  def postAccount(account: CurrencyAccount): ZIO[AccountService, AccountError, Unit] =
     ZIO.serviceWithZIO[AccountService](_.postAccount(account))
 
   def transfer(key: IdempotencyKey, instruction: TransferInstruction)(
-    update: (CurrencyAccount, CurrencyAccount) => Either[TransferServiceErrors, (CurrencyAccount, CurrencyAccount)]
-  ): ZIO[AccountService, TransferServiceErrors, TransferOutcome] =
+    update: (CurrencyAccount, CurrencyAccount) => Either[AccountError, (CurrencyAccount, CurrencyAccount)]
+  ): ZIO[AccountService, AccountError, TransferOutcome] =
     ZIO.serviceWithZIO[AccountService](_.transfer(key, instruction)(update))
 
 private final case class CompletedTransfer(instruction: TransferInstruction, transfer: AccountTransfer)
@@ -59,7 +55,7 @@ private case class DefaultDataStore(
 
   override def getAccount(
     accountNumber: AccountNumber
-  ): IO[TransferServiceErrors, CurrencyAccount] =
+  ): IO[AccountError, CurrencyAccount] =
     accounts
       .get(accountNumber)
       .commit
@@ -67,7 +63,7 @@ private case class DefaultDataStore(
         case Some(account) => ZIO.succeed(account)
         case None          => ZIO.fail(AccountDoesNotExist)
 
-  override def postAccount(account: CurrencyAccount): IO[TransferServiceErrors, Unit] =
+  override def postAccount(account: CurrencyAccount): IO[AccountError, Unit] =
     STM.atomically:
       accounts
         .contains(account.accountNumber)
@@ -76,8 +72,8 @@ private case class DefaultDataStore(
           case false => accounts.put(account.accountNumber, account)
 
   override def transfer(key: IdempotencyKey, instruction: TransferInstruction)(
-    update: (CurrencyAccount, CurrencyAccount) => Either[TransferServiceErrors, (CurrencyAccount, CurrencyAccount)]
-  ): IO[TransferServiceErrors, TransferOutcome] =
+    update: (CurrencyAccount, CurrencyAccount) => Either[AccountError, (CurrencyAccount, CurrencyAccount)]
+  ): IO[AccountError, TransferOutcome] =
     STM.atomically:
       completedTransfers
         .get(key)

@@ -125,7 +125,7 @@ Every failure has a JSON body with a stable `error` code to match on and a `mess
 | 400 | `UnknownCurrency` | The currency code is not ISO 4217 |
 | 400 | `CannotOpenAccountWithNegativeBalance` | A new account has a negative balance |
 | 400 | `AmountHasTooManyDecimalPlaces` | An amount is finer than its currency's minor unit |
-| 400 | `CannotTransferNegativeAmount` | A transfer amount is zero or less |
+| 400 | `TransferAmountNotPositive` | A transfer amount is zero or less |
 | 400 | `CannotTransferToSameAccount` | A transfer names the same account twice |
 | 400 | `IdempotencyKeyIsBlank` | The `Idempotency-Key` header is blank |
 | 404 | `AccountDoesNotExist` | The account, or an account in a transfer, does not exist |
@@ -144,7 +144,7 @@ Every failure has a JSON body with a stable `error` code to match on and a `mess
   kept in memory for the life of the process, like the accounts. The tests race many transfers at once, including
   ones that together ask for more than the balance and ones running in both directions, and check that no account
   is overdrawn and the total is unchanged.
-- Errors as values: Failures are a sealed `TransferServiceErrors` type in the ZIO error channel rather than
+- Errors as values: Failures are a sealed `AccountError` type in the ZIO error channel rather than
   exceptions.
 - OpenAPI: The routes are implemented from ZIO HTTP endpoints, so the Swagger page describes what the server does.
   Requests must be JSON. A request that does not decode gets the same error body as any other failure.
@@ -152,12 +152,13 @@ Every failure has a JSON body with a stable `error` code to match on and a `mess
 The account model is deliberately small:
 
 ```scala
-final case class CurrencyAccount(
-  accountNumber: AccountNumber,
-  balance: CurrencyAmount,
-  currency: Currency
-)
+final case class CurrencyAccount(accountNumber: AccountNumber, balance: Money)
+
+final case class Money(amount: BigDecimal, currency: Currency)
 ```
+
+`Money` only adds, subtracts and compares amounts of the same currency, and knows whether an amount fits its
+currency's minor unit.
 
 ## Possible next steps
 

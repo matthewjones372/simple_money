@@ -12,7 +12,7 @@ final case class IdempotencyKey(value: String) extends AnyVal
 final case class TransferInstruction(
   fromAccountNumber: AccountNumber,
   toAccountNumber: AccountNumber,
-  amount: CurrencyAmount
+  amount: BigDecimal
 )
 
 enum TransferOutcome:

@@ -29,7 +29,7 @@ object Schemas:
   def toAccountResponse(account: CurrencyAccount): AccountResponse =
     AccountResponse(
       account.accountNumber.value,
-      account.balance.value,
+      account.balance.amount,
       account.currency.getCurrencyCode
     )
 
@@ -96,20 +96,20 @@ object AccountRoutes:
     (for
       currency <- ZIO
                     .attempt(Currency.getInstance(request.currencyCode))
-                    .orElseFail(TransferServiceErrors.UnknownCurrency)
+                    .orElseFail(AccountError.UnknownCurrency)
       _ <- AccountTransferService.addNewAccount(
-             CurrencyAccount(AccountNumber(request.accountNumber), CurrencyAmount(request.balance), currency)
+             CurrencyAccount(AccountNumber(request.accountNumber), Money(request.balance, currency))
            )
     yield SuccessResponse(s"Successfully added ${request.accountNumber} into the datastore"))
       .mapError(ApiError.from)
 
   private val transfer = transferEndpoint.implement: (idempotencyKey, request) =>
-    (ZIO.fail(TransferServiceErrors.IdempotencyKeyIsBlank).when(idempotencyKey.isBlank) *>
+    (ZIO.fail(AccountError.IdempotencyKeyIsBlank).when(idempotencyKey.isBlank) *>
       AccountTransferService.accountTransfer(
         IdempotencyKey(idempotencyKey),
         AccountNumber(request.fromAccountNumber),
         AccountNumber(request.toAccountNumber),
-        CurrencyAmount(request.amount)
+        request.amount
       ))
       .as(
         SuccessResponse(
