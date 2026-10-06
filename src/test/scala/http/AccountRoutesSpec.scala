@@ -156,6 +156,18 @@ object AccountRoutesSpec extends ZIOSpecDefault:
         !body.contains("E+")
       )
     },
+    test("rejects a blank, padded, overlong or control-character account number") {
+      for
+        empty    <- postAccount("", "1", "GBP").flatMap(badRequest("InvalidAccountNumber"))
+        blank    <- postAccount("   ", "1", "GBP").flatMap(badRequest("InvalidAccountNumber"))
+        padded   <- postAccount("A ", "1", "GBP").flatMap(badRequest("InvalidAccountNumber"))
+        overlong <- postAccount("A" * 65, "1", "GBP").flatMap(badRequest("InvalidAccountNumber"))
+        control  <- postAccount("A\\u0007B", "1", "GBP").flatMap(badRequest("InvalidAccountNumber"))
+        iban     <- postAccount("GB29 NWBK 6016 1331 3282 19", "1", "GBP")
+        longest  <- postAccount("B" * 64, "1", "GBP")
+      yield empty && blank && padded && overlong && control &&
+        assertTrue(iban.status == Status.Ok, longest.status == Status.Ok)
+    },
     test("rejects an unknown currency") {
       postAccount("A", "10", "ZZZ").flatMap(badRequest("UnknownCurrency"))
     },

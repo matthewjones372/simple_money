@@ -50,7 +50,8 @@ curl -X POST localhost:8081/api/accounts -H 'Content-Type: application/json' -d 
 {"message": "Successfully added GB29 NWBK 6016 1331 3282 19 into the datastore"}
 ```
 
-`currencyCode` is an ISO 4217 code. The balance cannot be negative, cannot reach 1,000,000,000,000,000 (at most 15
+`accountNumber` must be 1 to 64 characters, with no spaces at either end and no control characters; spaces inside,
+as IBANs are often written, are fine. `currencyCode` is an ISO 4217 code. The balance cannot be negative, cannot reach 1,000,000,000,000,000 (at most 15
 digits before the decimal point) and cannot have more decimal places than the currency allows, so `50.001` GBP is
 refused. See [Errors](#errors) for what a failure returns.
 
@@ -123,6 +124,7 @@ Every failure has a JSON body with a stable `error` code to match on and a `mess
 | 400 | `MissingHeader`, `MalformedHeader` | A required header, such as `Idempotency-Key`, is missing or unreadable |
 | 400 | `MalformedQueryParam` | A query parameter, such as `limit`, is not a number |
 | 400 | `InvalidPageSize` | `limit` is not between 1 and 1000 |
+| 400 | `InvalidAccountNumber` | A new account's number is blank, padded, over 64 characters or has control characters |
 | 400 | `UnknownCurrency` | The currency code is not ISO 4217 |
 | 400 | `CannotOpenAccountWithNegativeBalance` | A new account has a negative balance |
 | 400 | `AmountHasTooManyDecimalPlaces` | An amount is finer than its currency's minor unit |

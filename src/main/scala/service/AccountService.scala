@@ -26,6 +26,7 @@ final class AccountService(accounts: AccountStore):
 
   def addNewAccount(account: CurrencyAccount): IO[AccountError, Unit] =
     for
+      _ <- ZIO.fromEither(validAccountNumber(account.accountNumber))
       _ <- ZIO.fromEither(nonNegativeOpeningBalance(account.balance))
       _ <- ZIO.fromEither(withinMaximum(account.balance.amount))
       _ <- ZIO.fromEither(fitsMinorUnit(account.balance))
@@ -66,6 +67,10 @@ final class AccountService(accounts: AccountStore):
   private def validPageSize(limit: Int): Either[AccountError, Unit] =
     if limit >= 1 && limit <= AccountService.maxPageSize then Right(())
     else Left(InvalidPageSize)
+
+  private def validAccountNumber(accountNumber: AccountNumber): Either[AccountError, Unit] =
+    if accountNumber.isValid then Right(())
+    else Left(InvalidAccountNumber)
 
   private def positiveTransferAmount(transferAmount: BigDecimal): Either[AccountError, Unit] =
     if transferAmount > 0 then Right(())

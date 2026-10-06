@@ -38,6 +38,13 @@ object ApiError:
 
   def from(error: AccountError): ApiError =
     error match
+      case InvalidAccountNumber =>
+        BadRequest(
+          ErrorResponse(
+            "InvalidAccountNumber",
+            "The account number must be 1 to 64 characters, with no spaces at either end and no control characters"
+          )
+        )
       case UnknownCurrency =>
         BadRequest(ErrorResponse("UnknownCurrency", "The currency code is not an ISO 4217 code"))
       case CannotOpenAccountWithNegativeBalance =>

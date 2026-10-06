@@ -23,6 +23,8 @@ object AccountError:
 
   case object UnknownCurrency extends AccountError
 
+  case object InvalidAccountNumber extends AccountError
+
   case object IdempotencyKeyReusedForDifferentTransfer extends AccountError
 
   case object IdempotencyKeyIsBlank extends AccountError
