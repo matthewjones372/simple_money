@@ -37,7 +37,7 @@ sbt test
 ### Create an account
 
 ```
-curl -X POST localhost:8081/api/accounts -d '{
+curl -X POST localhost:8081/api/accounts -H 'Content-Type: application/json' -d '{
   "accountNumber": "GB29 NWBK 6016 1331 3282 19",
   "balance": 50.00,
   "currencyCode": "GBP"
@@ -48,8 +48,15 @@ curl -X POST localhost:8081/api/accounts -d '{
 {"message": "Successfully added GB29 NWBK 6016 1331 3282 19 into the datastore"}
 ```
 
-`currencyCode` is an ISO 4217 code. An unknown code, or an account number that already exists, returns
-`400 Bad Request`.
+`currencyCode` is an ISO 4217 code. The balance cannot be negative or have more decimal places than the currency
+allows, so `50.001` GBP is refused. Failures return `400 Bad Request` with an error body:
+
+```json
+{"error": "AmountHasTooManyDecimalPlaces"}
+```
+
+The errors are `UnknownCurrency`, `AccountAlreadyExists`, `CannotOpenAccountWithNegativeBalance` and
+`AmountHasTooManyDecimalPlaces`.
 
 ### List accounts
 
@@ -67,7 +74,7 @@ curl localhost:8081/api/accounts
 ### Transfer
 
 ```
-curl -X PUT localhost:8081/api/accounts/transfer -d '{
+curl -X PUT localhost:8081/api/accounts/transfer -H 'Content-Type: application/json' -d '{
   "fromAccountNumber": "GB29 NWBK 3242 1331 9268 19",
   "toAccountNumber": "GB29 NWBK 6016 1331 3282 19",
   "amount": 58.60
@@ -81,6 +88,7 @@ curl -X PUT localhost:8081/api/accounts/transfer -d '{
 A transfer that cannot be made returns `400 Bad Request` with one of these errors:
 
 - `AccountDoesNotExist`
+- `AmountHasTooManyDecimalPlaces`, for an amount smaller than the currency's minor unit
 - `AccountHasInsufficientFunds`
 - `CannotTransferToSameAccount`
 - `CannotTransferToAccountWithDifferentCurrency`
@@ -95,7 +103,9 @@ A transfer that cannot be made returns `400 Bad Request` with one of these error
   transfers at once and checks the total is unchanged.
 - Errors as values: Failures are a sealed `TransferServiceErrors` type in the ZIO error channel rather than
   exceptions.
-- OpenAPI: The endpoints are described with ZIO HTTP's endpoint API, which generates the Swagger page.
+- OpenAPI: The routes are implemented from ZIO HTTP endpoints, so the Swagger page describes what the server does.
+  Requests must be JSON. A body that does not decode gets ZIO HTTP's own codec error, as JSON when the client sends
+  `Accept: application/json`.
 
 The account model is deliberately small:
 

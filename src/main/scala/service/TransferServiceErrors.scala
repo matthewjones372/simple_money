@@ -16,4 +16,10 @@ object TransferServiceErrors {
   case object CannotTransferToAccountWithDifferentCurrency extends TransferServiceErrors
 
   case object CannotTransferNegativeAmount extends TransferServiceErrors
+
+  case object CannotOpenAccountWithNegativeBalance extends TransferServiceErrors
+
+  case object AmountHasTooManyDecimalPlaces extends TransferServiceErrors
+
+  case object UnknownCurrency extends TransferServiceErrors
 }

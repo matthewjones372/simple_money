@@ -7,7 +7,6 @@ import zio.http.*
 import zio.http.endpoint.*
 import zio.http.endpoint.openapi.*
 import zio.schema.{DeriveSchema, Schema}
-import zio.schema.codec.JsonCodec
 
 import java.util.Currency
 
@@ -39,7 +38,6 @@ object AccountRoutes:
   private val getAccountsEndpoint =
     Endpoint(RoutePattern.GET / "api" / "accounts")
       .out[Seq[AccountResponse]]
-      .outError[ErrorResponse](Status.InternalServerError)
 
   private val postAccountEndpoint =
     Endpoint(RoutePattern.POST / "api" / "accounts")
@@ -54,7 +52,7 @@ object AccountRoutes:
       .outError[ErrorResponse](Status.BadRequest)
 
   val openAPISpec: OpenAPI =
-    val baseSpec = OpenAPIGen.fromEndpoints(
+    OpenAPIGen.fromEndpoints(
       title = "Simple Money API",
       version = "1.0.0",
       getAccountsEndpoint,
@@ -62,79 +60,35 @@ object AccountRoutes:
       transferEndpoint
     )
 
-    import scala.collection.immutable.ListMap
+  private def toErrorResponse(err: TransferServiceErrors): ErrorResponse = ErrorResponse(err.toString)
 
-    val schemasMap = ListMap(
-      OpenAPI.Key.fromString("AccountResponse").get -> OpenAPI.ReferenceOr.Or(
-        JsonSchema.fromZSchema(accountResponseSchema)
-      ),
-      OpenAPI.Key.fromString("ErrorResponse").get -> OpenAPI.ReferenceOr.Or(
-        JsonSchema.fromZSchema(errorResponseSchema)
-      ),
-      OpenAPI.Key.fromString("SuccessResponse").get -> OpenAPI.ReferenceOr.Or(
-        JsonSchema.fromZSchema(successResponseSchema)
-      ),
-      OpenAPI.Key.fromString("PostNewAccountRequest").get -> OpenAPI.ReferenceOr.Or(
-        JsonSchema.fromZSchema(postAccountRequestSchema)
-      ),
-      OpenAPI.Key.fromString("TransferRequest").get -> OpenAPI.ReferenceOr.Or(
-        JsonSchema.fromZSchema(transferRequestSchema)
+  private val getAccounts = getAccountsEndpoint.implement: _ =>
+    AccountTransferService.listAllAccounts.map(_.map(toAccountResponse))
+
+  private val postAccount = postAccountEndpoint.implement: request =>
+    (for
+      currency <- ZIO
+                    .attempt(Currency.getInstance(request.currencyCode))
+                    .orElseFail(TransferServiceErrors.UnknownCurrency)
+      _ <- AccountTransferService.addNewAccount(
+             CurrencyAccount(AccountNumber(request.accountNumber), CurrencyAmount(request.balance), currency)
+           )
+    yield SuccessResponse(s"Successfully added ${request.accountNumber} into the datastore"))
+      .mapError(toErrorResponse)
+
+  private val transfer = transferEndpoint.implement: request =>
+    AccountTransferService
+      .accountTransfer(
+        AccountNumber(request.fromAccountNumber),
+        AccountNumber(request.toAccountNumber),
+        CurrencyAmount(request.amount)
       )
-    )
+      .as(
+        SuccessResponse(
+          s"${request.amount} has been transferred from ${request.fromAccountNumber} to ${request.toAccountNumber}"
+        )
+      )
+      .mapError(toErrorResponse)
 
-    val newComponents = baseSpec.components
-      .map(_.copy(schemas = schemasMap))
-      .getOrElse(OpenAPI.Components(schemas = schemasMap))
-
-    baseSpec.copy(components = Some(newComponents))
-
-  val routes: Routes[AccountService & AccountTransferService, Response] = Routes(
-    Method.GET / "api" / "accounts" -> handler:
-      AccountTransferService.listAllAccounts.map: accounts =>
-        val responses = accounts.map(toAccountResponse)
-        val json      = JsonCodec.jsonEncoder(accountResponseSeqSchema).encodeJson(responses, None)
-        Response.json(json.toString)
-    ,
-
-    Method.POST / "api" / "accounts" -> handler: (req: Request) =>
-      val result = for
-        body     <- req.body.asString
-        decoded  <- ZIO.fromEither(JsonCodec.jsonDecoder(postAccountRequestSchema).decodeJson(body))
-        currency <- ZIO.attempt(Currency.getInstance(decoded.currencyCode))
-        account = CurrencyAccount(
-                    AccountNumber(decoded.accountNumber),
-                    CurrencyAmount(decoded.balance),
-                    currency
-                  )
-        _       <- AccountTransferService.addNewAccount(account)
-        response = SuccessResponse(s"Successfully added ${decoded.accountNumber} into the datastore")
-        json     = JsonCodec.jsonEncoder(successResponseSchema).encodeJson(response, None)
-      yield Response.json(json.toString)
-
-      result.catchAll:
-        case err: TransferServiceErrors => ZIO.succeed(Response.badRequest(err.toString))
-        case err: Throwable             => ZIO.succeed(Response.badRequest(err.getMessage))
-        case err                        => ZIO.succeed(Response.badRequest(err.toString))
-    ,
-
-    Method.PUT / "api" / "accounts" / "transfer" -> handler: (req: Request) =>
-      val result = for
-        body    <- req.body.asString
-        decoded <- ZIO.fromEither(JsonCodec.jsonDecoder(transferRequestSchema).decodeJson(body))
-        _ <- AccountTransferService.accountTransfer(
-               AccountNumber(decoded.fromAccountNumber),
-               AccountNumber(decoded.toAccountNumber),
-               CurrencyAmount(decoded.amount)
-             )
-        response =
-          SuccessResponse(
-            s"${decoded.amount} has been transferred from ${decoded.fromAccountNumber} to ${decoded.toAccountNumber}"
-          )
-        json = JsonCodec.jsonEncoder(successResponseSchema).encodeJson(response, None)
-      yield Response.json(json.toString)
-
-      result.catchAll:
-        case err: TransferServiceErrors => ZIO.succeed(Response.badRequest(err.toString))
-        case err: Throwable             => ZIO.succeed(Response.badRequest(err.getMessage))
-        case err                        => ZIO.succeed(Response.badRequest(err.toString))
-  )
+  val routes: Routes[AccountService & AccountTransferService, Response] =
+    Routes(getAccounts, postAccount, transfer)
