@@ -9,9 +9,10 @@ import zio.http.endpoint.*
 import zio.http.endpoint.openapi.*
 import zio.schema.{DeriveSchema, Schema}
 
-import java.util.Currency
+import java.util.{Currency, UUID}
 
-case class AccountResponse(accountNumber: String, balance: BigDecimal, currencyCode: String)
+case class AccountResponse(id: String, accountNumber: String, balance: BigDecimal, currencyCode: String)
+case class LookupRequest(accountNumber: String)
 case class AccountPageResponse(accounts: List[AccountResponse], next: Option[String])
 case class PostNewAccountRequest(accountNumber: String, balance: BigDecimal, currencyCode: String)
 case class TransferRequest(fromAccountNumber: String, toAccountNumber: String, amount: BigDecimal)
@@ -22,12 +23,14 @@ object Schemas:
   given accountResponseSchema: Schema[AccountResponse]          = DeriveSchema.gen[AccountResponse]
   given accountPageResponseSchema: Schema[AccountPageResponse]  = DeriveSchema.gen[AccountPageResponse]
   given postAccountRequestSchema: Schema[PostNewAccountRequest] = DeriveSchema.gen[PostNewAccountRequest]
+  given lookupRequestSchema: Schema[LookupRequest]              = DeriveSchema.gen[LookupRequest]
   given transferRequestSchema: Schema[TransferRequest]          = DeriveSchema.gen[TransferRequest]
   given errorResponseSchema: Schema[ErrorResponse]              = DeriveSchema.gen[ErrorResponse]
   given successResponseSchema: Schema[SuccessResponse]          = DeriveSchema.gen[SuccessResponse]
 
   def toAccountResponse(account: CurrencyAccount): AccountResponse =
     AccountResponse(
+      account.id.value.toString,
       account.accountNumber.value,
       account.balance.amount,
       account.currency.getCurrencyCode
@@ -43,7 +46,10 @@ object Schemas:
     if amount.scale < 0 && Money.isWithinMaximum(amount) then amount.setScale(0) else amount
 
   def toAccountPageResponse(page: AccountPage): AccountPageResponse =
-    AccountPageResponse(page.accounts.map(toAccountResponse).toList, page.next.map(_.value))
+    AccountPageResponse(page.accounts.map(toAccountResponse).toList, page.next.map(_.value.toString))
+
+  def location(account: CurrencyAccount): Header.Location =
+    Header.Location(URL(Path.root / "api" / "accounts" / account.id.value.toString))
 
 object AccountRoutes:
   import Schemas.{*, given}
@@ -53,22 +59,30 @@ object AccountRoutes:
   private val getAccountsEndpoint =
     Endpoint(RoutePattern.GET / "api" / "accounts")
       .query(HttpCodec.query[Int]("limit").optional)
-      .query(HttpCodec.query[String]("after").optional)
+      .query(HttpCodec.query[UUID]("after").optional)
       .out[AccountPageResponse]
-      .outErrors[ApiError](ApiError.badRequest, ApiError.notFound)
+      .outError[ApiError.BadRequest](Status.BadRequest)
       .copy(codecError = ApiError.requestCodecError)
 
   private val getAccountEndpoint =
-    Endpoint(RoutePattern.GET / "api" / "accounts" / PathCodec.string("accountNumber"))
+    Endpoint(RoutePattern.GET / "api" / "accounts" / PathCodec.uuid("id"))
       .out[AccountResponse]
-      .outErrors[ApiError](ApiError.badRequest, ApiError.notFound)
+      .outError[ApiError.NotFound](Status.NotFound)
+
+  // A POST, so the account number travels in the body rather than the URL
+  private val lookupEndpoint =
+    Endpoint(RoutePattern.POST / "api" / "accounts" / "lookup")
+      .in[LookupRequest]
+      .out[AccountResponse]
+      .outErrors[ApiError.BadRequest | ApiError.NotFound](ApiError.badRequest, ApiError.notFound)
       .copy(codecError = ApiError.requestCodecError)
 
   private val postAccountEndpoint =
     Endpoint(RoutePattern.POST / "api" / "accounts")
       .in[PostNewAccountRequest]
-      .out[SuccessResponse]
-      .outErrors[ApiError](ApiError.badRequest, ApiError.conflict)
+      .out[AccountResponse](Status.Created)
+      .outHeader(HeaderCodec.location)
+      .outErrors[ApiError.BadRequest | ApiError.Conflict](ApiError.badRequest, ApiError.conflict)
       .copy(codecError = ApiError.requestCodecError)
 
   private val transferEndpoint =
@@ -85,36 +99,44 @@ object AccountRoutes:
       version = "1.0.0",
       getAccountsEndpoint,
       getAccountEndpoint,
+      lookupEndpoint,
       postAccountEndpoint,
       transferEndpoint
     )
 
   private val getAccounts = getAccountsEndpoint.implement: (limit, after) =>
-    AccountTransferService
-      .listAccounts(after.map(AccountNumber(_)), limit.getOrElse(defaultPageSize))
+    AccountService
+      .listAccounts(after.map(AccountId(_)), limit.getOrElse(defaultPageSize))
       .map(toAccountPageResponse)
-      .mapError(ApiError.from)
+      .mapError(ApiError.invalid)
 
-  private val getAccount = getAccountEndpoint.implement: accountNumber =>
-    AccountTransferService
-      .getAccount(AccountNumber(accountNumber))
+  private val getAccount = getAccountEndpoint.implement: id =>
+    AccountService
+      .getAccount(AccountId(id))
       .map(toAccountResponse)
-      .mapError(ApiError.from)
+      .mapError(ApiError.missing)
+
+  private val lookup = lookupEndpoint.implement: request =>
+    AccountService
+      .findAccount(AccountNumber(request.accountNumber))
+      .map(toAccountResponse)
+      .mapError(ApiError.missing)
 
   private val postAccount = postAccountEndpoint.implement: request =>
     (for
       currency <- ZIO
                     .attempt(Currency.getInstance(request.currencyCode))
                     .orElseFail(AccountError.UnknownCurrency)
-      _ <- AccountTransferService.addNewAccount(
-             CurrencyAccount(AccountNumber(request.accountNumber), Money(plain(request.balance), currency))
-           )
-    yield SuccessResponse(s"Successfully added ${request.accountNumber} into the datastore"))
-      .mapError(ApiError.from)
+      account <-
+        AccountService.openAccount(AccountNumber(request.accountNumber), Money(plain(request.balance), currency))
+    yield (toAccountResponse(account), location(account)))
+      .mapError:
+        case error: AccountError.Invalid     => ApiError.invalid(error)
+        case error: AccountError.Conflicting => ApiError.conflicting(error)
 
   private val transfer = transferEndpoint.implement: (idempotencyKey, request) =>
     (ZIO.fail(AccountError.IdempotencyKeyIsBlank).when(idempotencyKey.isBlank) *>
-      AccountTransferService.accountTransfer(
+      AccountService.accountTransfer(
         IdempotencyKey(idempotencyKey),
         AccountNumber(request.fromAccountNumber),
         AccountNumber(request.toAccountNumber),
@@ -127,5 +149,5 @@ object AccountRoutes:
       )
       .mapError(ApiError.from)
 
-  val routes: Routes[AccountTransferService, Response] =
-    Routes(getAccounts, getAccount, postAccount, transfer)
+  val routes: Routes[AccountService, Response] =
+    Routes(getAccounts, getAccount, lookup, postAccount, transfer)

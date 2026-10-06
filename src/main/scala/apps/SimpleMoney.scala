@@ -1,8 +1,8 @@
 package apps
 
 import http.AccountRoutes
-import service.AccountTransferService
 import service.AccountService
+import service.AccountStore
 import zio.*
 import zio.http.*
 import zio.http.endpoint.openapi.SwaggerUI
@@ -13,8 +13,8 @@ object SimpleMoney extends ZIOAppDefault:
   // Read from the PORT environment variable or the port system property
   val portConfig: Config[Int] = Config.int("port").withDefault(8081)
 
-  private val appLayer: ULayer[AccountTransferService] =
-    AccountService.layer >>> AccountTransferService.layer
+  private val appLayer: ULayer[AccountService] =
+    AccountStore.layer >>> AccountService.layer
 
   private val swaggerRoutes: Routes[Any, Response] =
     SwaggerUI.routes("docs", AccountRoutes.openAPISpec)
