@@ -4,6 +4,7 @@ import domain.*
 import service.*
 import zio.*
 import zio.http.*
+import zio.http.codec.HeaderCodec
 import zio.http.endpoint.*
 import zio.http.endpoint.openapi.*
 import zio.schema.{DeriveSchema, Schema}
@@ -46,7 +47,8 @@ object AccountRoutes:
       .outError[ErrorResponse](Status.BadRequest)
 
   private val transferEndpoint =
-    Endpoint(RoutePattern.PUT / "api" / "accounts" / "transfer")
+    Endpoint(RoutePattern.POST / "api" / "accounts" / "transfer")
+      .header(HeaderCodec.name[String]("Idempotency-Key"))
       .in[TransferRequest]
       .out[SuccessResponse]
       .outError[ErrorResponse](Status.BadRequest)
@@ -76,13 +78,14 @@ object AccountRoutes:
     yield SuccessResponse(s"Successfully added ${request.accountNumber} into the datastore"))
       .mapError(toErrorResponse)
 
-  private val transfer = transferEndpoint.implement: request =>
-    AccountTransferService
-      .accountTransfer(
+  private val transfer = transferEndpoint.implement: (idempotencyKey, request) =>
+    (ZIO.fail(TransferServiceErrors.IdempotencyKeyIsBlank).when(idempotencyKey.isBlank) *>
+      AccountTransferService.accountTransfer(
+        IdempotencyKey(idempotencyKey),
         AccountNumber(request.fromAccountNumber),
         AccountNumber(request.toAccountNumber),
         CurrencyAmount(request.amount)
-      )
+      ))
       .as(
         SuccessResponse(
           s"${request.amount} has been transferred from ${request.fromAccountNumber} to ${request.toAccountNumber}"
@@ -90,5 +93,5 @@ object AccountRoutes:
       )
       .mapError(toErrorResponse)
 
-  val routes: Routes[AccountService & AccountTransferService, Response] =
+  val routes: Routes[AccountTransferService, Response] =
     Routes(getAccounts, postAccount, transfer)

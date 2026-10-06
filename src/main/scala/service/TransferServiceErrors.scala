@@ -22,4 +22,8 @@ object TransferServiceErrors {
   case object AmountHasTooManyDecimalPlaces extends TransferServiceErrors
 
   case object UnknownCurrency extends TransferServiceErrors
+
+  case object IdempotencyKeyReusedForDifferentTransfer extends TransferServiceErrors
+
+  case object IdempotencyKeyIsBlank extends TransferServiceErrors
 }

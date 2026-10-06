@@ -10,10 +10,10 @@ import zio.test.*
 object AccountRoutesSpec extends ZIOSpecDefault {
   import Schemas.given
 
-  val testLayer: ULayer[AccountService & AccountTransferService] =
-    AccountService.layer ++ AccountTransferService.layer
+  val testLayer: ULayer[AccountTransferService] =
+    AccountService.layer >>> AccountTransferService.layer
 
-  def run(request: Request): ZIO[AccountService & AccountTransferService, Nothing, Response] =
+  def run(request: Request): ZIO[AccountTransferService, Nothing, Response] =
     AccountRoutes.routes.runZIO(request)
 
   def decode[A](response: Response)(using schema: Schema[A]): Task[A] =
@@ -31,13 +31,17 @@ object AccountRoutesSpec extends ZIOSpecDefault {
       )
     )
 
-  def transfer(from: String, to: String, amount: String) =
-    run(
-      Request.put(
-        "/api/accounts/transfer",
-        Body.fromString(s"""{"fromAccountNumber": "$from", "toAccountNumber": "$to", "amount": $amount}""")
-      )
+  def transferRequest(from: String, to: String, amount: String) =
+    Request.post(
+      "/api/accounts/transfer",
+      Body.fromString(s"""{"fromAccountNumber": "$from", "toAccountNumber": "$to", "amount": $amount}""")
     )
+
+  def transferWithKey(key: String, from: String, to: String, amount: String) =
+    run(transferRequest(from, to, amount).addHeader("Idempotency-Key", key))
+
+  def transfer(from: String, to: String, amount: String) =
+    Random.nextUUID.flatMap(uuid => transferWithKey(uuid.toString, from, to, amount))
 
   def balances = run(Request.get("/api/accounts"))
     .flatMap(decode[Seq[AccountResponse]])
@@ -91,7 +95,8 @@ object AccountRoutesSpec extends ZIOSpecDefault {
       for {
         response <- run(
                       Request
-                        .put("/api/accounts/transfer", Body.fromString("""{"amount": "x"}"""))
+                        .post("/api/accounts/transfer", Body.fromString("""{"amount": "x"}"""))
+                        .addHeader("Idempotency-Key", "bad-body")
                         .addHeader(Header.Accept(MediaType.application.json))
                     )
       } yield assertTrue(
@@ -138,9 +143,47 @@ object AccountRoutesSpec extends ZIOSpecDefault {
         result <- transfer("A", "B", "10.01").flatMap(assertError(_, "AccountHasInsufficientFunds"))
       } yield result
     },
+    test("applies a retried transfer once and answers the retry as the original") {
+      for {
+        _      <- postAccount("A", "100", "GBP")
+        _      <- postAccount("B", "0", "GBP")
+        first  <- transferWithKey("key-1", "A", "B", "10")
+        second <- transferWithKey("key-1", "A", "B", "10")
+        body1  <- first.body.asString
+        body2  <- second.body.asString
+        after  <- balances
+      } yield assertTrue(
+        first.status == Status.Ok,
+        second.status == Status.Ok,
+        body1 == body2,
+        after == Map("A" -> BigDecimal(90), "B" -> BigDecimal(10))
+      )
+    },
+    test("refuses an idempotency key reused for a different transfer") {
+      for {
+        _      <- postAccount("A", "100", "GBP")
+        _      <- postAccount("B", "0", "GBP")
+        _      <- transferWithKey("key-1", "A", "B", "10")
+        result <- transferWithKey("key-1", "A", "B", "20")
+                    .flatMap(assertError(_, "IdempotencyKeyReusedForDifferentTransfer"))
+        after  <- balances
+      } yield result && assertTrue(after == Map("A" -> BigDecimal(90), "B" -> BigDecimal(10)))
+    },
+    test("refuses a transfer without an idempotency key") {
+      for {
+        _       <- postAccount("A", "100", "GBP")
+        _       <- postAccount("B", "0", "GBP")
+        missing <- run(transferRequest("A", "B", "10"))
+        blank   <- transferWithKey(" ", "A", "B", "10").flatMap(assertError(_, "IdempotencyKeyIsBlank"))
+        after   <- balances
+      } yield blank && assertTrue(
+        missing.status == Status.BadRequest,
+        after == Map("A" -> BigDecimal(100), "B" -> BigDecimal(0))
+      )
+    },
     test("describes the error body in the OpenAPI spec") {
       val spec = AccountRoutes.openAPISpec.toJson
-      assertTrue(spec.contains("ErrorResponse"), spec.contains("TransferRequest"))
+      assertTrue(spec.contains("ErrorResponse"), spec.contains("TransferRequest"), spec.contains("Idempotency-Key"))
     }
   ).provide(testLayer, Runtime.removeDefaultLoggers >>> ZTestLogger.default)
 }

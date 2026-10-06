@@ -1,6 +1,14 @@
 package infrastructure
 
-import domain.{AccountNumber, CurrencyAccount, CurrencyAmount}
+import domain.{
+  AccountNumber,
+  AccountTransfer,
+  CurrencyAccount,
+  CurrencyAmount,
+  IdempotencyKey,
+  TransferInstruction,
+  TransferOutcome
+}
 import java.util.Currency
 import zio._
 import zio.test._
@@ -12,6 +20,14 @@ object AccountServiceSpec extends ZIOSpecDefault {
 
   val gbp: Currency = Currency.getInstance("GBP")
   val testAccount   = CurrencyAccount(AccountNumber("TEST_ACCOUNT"), CurrencyAmount(100), gbp)
+
+  def moveTwentyFive(from: CurrencyAccount, to: CurrencyAccount) =
+    Right(
+      (
+        from.copy(balance = CurrencyAmount(from.balance.value - 25)),
+        to.copy(balance = CurrencyAmount(to.balance.value + 25))
+      )
+    )
 
   def spec = suite("AccountServiceSpec")(
     test("should successfully post a new account") {
@@ -62,21 +78,75 @@ object AccountServiceSpec extends ZIOSpecDefault {
       for {
         _ <- AccountService.postAccount(account1)
         _ <- AccountService.postAccount(account2)
-        result <- AccountService.transfer(account1.accountNumber, account2.accountNumber) { (from, to) =>
-                    Right(
-                      (
-                        from.copy(balance = CurrencyAmount(from.balance.value - 25)),
-                        to.copy(balance = CurrencyAmount(to.balance.value + 25))
-                      )
-                    )
-                  }
+        result <- AccountService.transfer(
+                    IdempotencyKey("atomic"),
+                    TransferInstruction(account1.accountNumber, account2.accountNumber, CurrencyAmount(25))
+                  )(moveTwentyFive)
         updated1 <- AccountService.getAccount(account1.accountNumber)
         updated2 <- AccountService.getAccount(account2.accountNumber)
       } yield assertTrue(
         updated1.balance == CurrencyAmount(75),
         updated2.balance == CurrencyAmount(75),
-        result.fromBefore == account1,
-        result.toBefore == account2
+        result == TransferOutcome.Applied(
+          AccountTransfer(account1, account2, updated1, updated2)
+        )
+      )
+    },
+    test("should not apply a transfer twice for the same idempotency key") {
+      val account1    = CurrencyAccount(AccountNumber("REPLAY_1"), CurrencyAmount(100), gbp)
+      val account2    = CurrencyAccount(AccountNumber("REPLAY_2"), CurrencyAmount(50), gbp)
+      val instruction = TransferInstruction(account1.accountNumber, account2.accountNumber, CurrencyAmount(25))
+
+      for {
+        _        <- AccountService.postAccount(account1)
+        _        <- AccountService.postAccount(account2)
+        first    <- AccountService.transfer(IdempotencyKey("replay"), instruction)(moveTwentyFive)
+        second   <- AccountService.transfer(IdempotencyKey("replay"), instruction)(moveTwentyFive)
+        updated1 <- AccountService.getAccount(account1.accountNumber)
+      } yield assertTrue(
+        first.isInstanceOf[TransferOutcome.Applied],
+        second == TransferOutcome.Replayed(first.asInstanceOf[TransferOutcome.Applied].transfer),
+        updated1.balance == CurrencyAmount(75)
+      )
+    },
+    test("should refuse an idempotency key reused for a different transfer") {
+      val account1 = CurrencyAccount(AccountNumber("REUSE_1"), CurrencyAmount(100), gbp)
+      val account2 = CurrencyAccount(AccountNumber("REUSE_2"), CurrencyAmount(50), gbp)
+
+      for {
+        _ <- AccountService.postAccount(account1)
+        _ <- AccountService.postAccount(account2)
+        _ <- AccountService.transfer(
+               IdempotencyKey("reuse"),
+               TransferInstruction(account1.accountNumber, account2.accountNumber, CurrencyAmount(25))
+             )(moveTwentyFive)
+        result <- AccountService
+                    .transfer(
+                      IdempotencyKey("reuse"),
+                      TransferInstruction(account1.accountNumber, account2.accountNumber, CurrencyAmount(30))
+                    )(moveTwentyFive)
+                    .either
+        updated1 <- AccountService.getAccount(account1.accountNumber)
+      } yield assertTrue(
+        result == Left(IdempotencyKeyReusedForDifferentTransfer),
+        updated1.balance == CurrencyAmount(75)
+      )
+    },
+    test("should not record a failed transfer, so the same key can be retried") {
+      val account1    = CurrencyAccount(AccountNumber("RETRY_1"), CurrencyAmount(100), gbp)
+      val account2    = CurrencyAccount(AccountNumber("RETRY_2"), CurrencyAmount(50), gbp)
+      val instruction = TransferInstruction(account1.accountNumber, account2.accountNumber, CurrencyAmount(25))
+
+      for {
+        _ <- AccountService.postAccount(account1)
+        _ <- AccountService.postAccount(account2)
+        failed <- AccountService
+                    .transfer(IdempotencyKey("retry"), instruction)((_, _) => Left(AccountHasInsufficientFunds))
+                    .either
+        retried <- AccountService.transfer(IdempotencyKey("retry"), instruction)(moveTwentyFive)
+      } yield assertTrue(
+        failed == Left(AccountHasInsufficientFunds),
+        retried.isInstanceOf[TransferOutcome.Applied]
       )
     }
   ).provide(AccountService.layer)
