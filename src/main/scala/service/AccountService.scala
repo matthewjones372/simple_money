@@ -4,7 +4,6 @@ import domain.{AccountNumber, AccountTransfer, CurrencyAccount, IdempotencyKey, 
 import service.TransferServiceErrors.{
   AccountAlreadyExists,
   AccountDoesNotExist,
-  FailedToUpdateAccount,
   IdempotencyKeyReusedForDifferentTransfer
 }
 import zio.*
@@ -15,8 +14,6 @@ trait AccountService:
   def getAllAccounts: UIO[Seq[CurrencyAccount]]
 
   def getAccount(accountNumber: AccountNumber): IO[TransferServiceErrors, CurrencyAccount]
-
-  def updateAccount(account: CurrencyAccount): IO[TransferServiceErrors, Unit]
 
   def postAccount(account: CurrencyAccount): IO[TransferServiceErrors, Unit]
 
@@ -40,9 +37,6 @@ object AccountService:
 
   def getAccount(accountNumber: AccountNumber): ZIO[AccountService, TransferServiceErrors, CurrencyAccount] =
     ZIO.serviceWithZIO[AccountService](_.getAccount(accountNumber))
-
-  def updateAccount(account: CurrencyAccount): ZIO[AccountService, TransferServiceErrors, Unit] =
-    ZIO.serviceWithZIO[AccountService](_.updateAccount(account))
 
   def postAccount(account: CurrencyAccount): ZIO[AccountService, TransferServiceErrors, Unit] =
     ZIO.serviceWithZIO[AccountService](_.postAccount(account))
@@ -72,14 +66,6 @@ private case class DefaultDataStore(
       .flatMap:
         case Some(account) => ZIO.succeed(account)
         case None          => ZIO.fail(AccountDoesNotExist)
-
-  override def updateAccount(account: CurrencyAccount): IO[TransferServiceErrors, Unit] =
-    STM.atomically:
-      accounts
-        .contains(account.accountNumber)
-        .flatMap:
-          case true  => accounts.put(account.accountNumber, account)
-          case false => STM.fail(FailedToUpdateAccount)
 
   override def postAccount(account: CurrencyAccount): IO[TransferServiceErrors, Unit] =
     STM.atomically:

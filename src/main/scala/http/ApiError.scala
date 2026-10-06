@@ -54,10 +54,10 @@ object ApiError:
         BadRequest(ErrorResponse("CannotTransferToSameAccount", "An account cannot transfer to itself"))
       case IdempotencyKeyIsBlank =>
         BadRequest(ErrorResponse("IdempotencyKeyIsBlank", "The Idempotency-Key header cannot be blank"))
+      case InvalidPageSize =>
+        BadRequest(ErrorResponse("InvalidPageSize", "The limit must be between 1 and 1000"))
       case AccountDoesNotExist =>
         NotFound(ErrorResponse("AccountDoesNotExist", "An account in the request does not exist"))
-      case FailedToUpdateAccount =>
-        NotFound(ErrorResponse("FailedToUpdateAccount", "The account to update does not exist"))
       case AccountAlreadyExists =>
         Conflict(ErrorResponse("AccountAlreadyExists", "An account with this number already exists"))
       case IdempotencyKeyReusedForDifferentTransfer =>
@@ -99,6 +99,8 @@ object ApiError:
         ErrorResponse("MalformedHeader", s"The ${headerName(name)} header could not be read")
       case HttpCodecError.DecodingErrorHeader(name, _) =>
         ErrorResponse("MalformedHeader", s"The ${headerName(name)} header could not be read")
+      case HttpCodecError.MalformedQueryParam(name, _) =>
+        ErrorResponse("MalformedQueryParam", s"The $name query parameter could not be read")
       case _: HttpCodecError.UnsupportedContentType =>
         ErrorResponse("UnsupportedContentType", "The request body must be JSON")
       case _: HttpCodecError.MalformedBody =>

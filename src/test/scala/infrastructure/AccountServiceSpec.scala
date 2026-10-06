@@ -70,16 +70,6 @@ object AccountServiceSpec extends ZIOSpecDefault {
         result <- AccountService.getAccount(AccountNumber("NON_EXISTENT")).either
       } yield assertTrue(result == Left(AccountDoesNotExist))
     },
-    test("should update existing account") {
-      val original = CurrencyAccount(AccountNumber("UPDATE_TEST"), CurrencyAmount(100), gbp)
-      val updated  = original.copy(balance = CurrencyAmount(200))
-
-      for {
-        _         <- AccountService.postAccount(original)
-        _         <- AccountService.updateAccount(updated)
-        retrieved <- AccountService.getAccount(original.accountNumber)
-      } yield assertTrue(retrieved.balance == CurrencyAmount(200))
-    },
     test("should atomically modify two accounts") {
       val account1 = CurrencyAccount(AccountNumber("ATOMIC_1"), CurrencyAmount(100), gbp)
       val account2 = CurrencyAccount(AccountNumber("ATOMIC_2"), CurrencyAmount(50), gbp)
