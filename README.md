@@ -1,182 +1,117 @@
 # Simple Money
 
-Currency transfers between accounts within a business.
+A small HTTP service for moving money between accounts, in Scala 3 with ZIO and ZIO HTTP. Accounts are held in memory,
+and transfers are atomic using ZIO STM.
 
-### Assumptions
+It started in 2018 as an Akka and cats project and was later rewritten on ZIO.
 
-* Transfers are system to system, no authentication has been implemented.
+## Scope
 
-* All validation of account variables is done by some external system feeding the service.
+- No authentication: callers are other internal systems.
+- Account details are assumed to be validated before they reach the service.
+- Transfers are between accounts held here, with no third party involved.
+- Both accounts in a transfer must have the same currency.
 
-* Transfers are only made between internal accounts, there is no need to contact a third party.
+## Running
 
-* Transfers are only made between accounts with the same currency.
-
-### Prerequisites
-
-* [SBT](https://www.scala-sbt.org/) - Interactive build tool, installation instructions can be found [here](https://www.scala-sbt.org/1.x/docs/Setup.html)
-
-
-### Building
+Requires [sbt](https://www.scala-sbt.org/) and a JDK.
 
 ```
-$sbt compile
+sbt run
 ```
 
-### Running
+The server listens on http://localhost:8081, with Swagger UI at http://localhost:8081/docs.
 
 ```
-$sbt run
-```
-*   Will launch a demo server on http://localhost:8081
-
-## Running the tests
-
-```
-$sbt test
-```
-Example:
-```
-[info] InMemoryEvalDataStoreUnitTest:
-[info] InMemoryAccountDataStore
-[info] - ListAllAccounts should list accounts correctly
-[info]   GetAccount should
-[info]   - return the correct account
-[info]   - return AccountDoesNotExist when a non existing account is requested
-[info]   UpdateAccount should
-[info]   - only update an existing account
-[info]   - update the correct account
-[info]   PostAccount should
-[info]   - post a new account into the Datastore
-[info]   - not post an account that already exists
+sbt test
 ```
 
-### API Resources
+## API
 
-  - GET /api/accounts
-  - POST /api/accounts
-  - PUT /api/accounts/transfer
-### Request & Response Examples
+| Method | Path | Body |
+|---|---|---|
+| GET | `/api/accounts` | |
+| POST | `/api/accounts` | `accountNumber`, `balance`, `currencyCode` |
+| PUT | `/api/accounts/transfer` | `fromAccountNumber`, `toAccountNumber`, `amount` |
 
-####GET /api/accounts
-
-Gets all accounts int the datastore.
-
-Example: http://example.com/api/accounts
-
-Response body:
+### Create an account
 
 ```
+curl -X POST localhost:8081/api/accounts -d '{
+  "accountNumber": "GB29 NWBK 6016 1331 3282 19",
+  "balance": 50.00,
+  "currencyCode": "GBP"
+}'
+```
+
+```json
+{"message": "Successfully added GB29 NWBK 6016 1331 3282 19 into the datastore"}
+```
+
+`currencyCode` is an ISO 4217 code. An unknown code, or an account number that already exists, returns
+`400 Bad Request`.
+
+### List accounts
+
+```
+curl localhost:8081/api/accounts
+```
+
+```json
 [
-    {
-        "accountNumber": "GB29 NWBK 3242 1331 9268 19",
-        "balance": 423.1,
-        "currency": {
-            "type": "GBP"
-        }
-    },
-    {
-        "accountNumber": "GB29 NWBK 7039 1331 9268 19",
-        "balance": 10002.1,
-        "currency": {
-            "type": "GBP"
-        }
-      }
-   }
+  {"accountNumber": "GB29 NWBK 6016 1331 3282 19", "balance": 50.00, "currencyCode": "GBP"},
+  {"accountNumber": "GB29 NWBK 3242 1331 9268 19", "balance": 423.10, "currencyCode": "GBP"}
 ]
 ```
 
-####POST /api/accounts
+### Transfer
 
-Posts a new account into the datastore
-
-Example: http://example.com/api/accounts
-
-Input body:
 ```
-{
-  "accountNumber": "GB29 NWBK 6016 1331 3282 19",
-  "balance": 50.0,
-  "currency": {
-    "type": "GBP"
-  }
-}
+curl -X PUT localhost:8081/api/accounts/transfer -d '{
+  "fromAccountNumber": "GB29 NWBK 3242 1331 9268 19",
+  "toAccountNumber": "GB29 NWBK 6016 1331 3282 19",
+  "amount": 58.60
+}'
 ```
 
-Response body on success:
-```
-{
-    "response": "Successfully added GB29 NWBK 6016 1331 3282 19 into the Datastore"
-}
+```json
+{"message": "58.60 has been transferred from GB29 NWBK 3242 1331 9268 19 to GB29 NWBK 6016 1331 3282 19"}
 ```
 
-Response body on failure:
-```
-{
-    "response":"Could not add GB29 NWBK 6016 1331 3282 19 into the data store reason: AccountAlreadyExists"
-}
-```
+A transfer that cannot be made returns `400 Bad Request` with one of these errors:
 
-####PUT /api/accounts/transfer
+- `AccountDoesNotExist`
+- `AccountHasInsufficientFunds`
+- `CannotTransferToSameAccount`
+- `CannotTransferToAccountWithDifferentCurrency`
+- `CannotTransferNegativeAmount`
 
-Transfer funds between accounts
+## Design
 
-Example: http://example.com/api/accounts/transfer
+- Layers: `AccountService` holds the accounts, and `AccountTransferService` holds the transfer rules. Both are
+  ZLayers, so the tests can provide their own.
+- Atomic transfers: Accounts live in a `TMap`. A transfer reads both accounts, checks the rules and writes both
+  balances in one STM transaction, so concurrent transfers cannot lose or create money. One of the tests runs many
+  transfers at once and checks the total is unchanged.
+- Errors as values: Failures are a sealed `TransferServiceErrors` type in the ZIO error channel rather than
+  exceptions.
+- OpenAPI: The endpoints are described with ZIO HTTP's endpoint API, which generates the Swagger page.
 
-Input body:
-```
-{
-	"fromAccountNumber": "GB29 NWBK 6016 1331 3282 19",
-	"toAccountNumber": "GB29 NWBK 3242 1331 9268 19",
-	"amount": 58.60
-}
-```
+The account model is deliberately small:
 
-Response body on success:
-```
-{
-    "response": "Transfer unsuccessful from account GB29 NWBK 6016 1331 3282 19 to GB29 NWBK 3242 1331 9268 19 error: AccountHasInsufficientFunds"
-}
-```
-
-Response body on failure:
-```
-{
-    "response": "Transfer unsuccessful from account GB29 NWBK 6016 1331 3282 19 to GB29 NWBK 3242 1331 9268 19 error: AccountHasInsufficientFunds"
-}
-```
-
-### Design
-
-* **ZIO 2 Based Architecture**: The application uses ZIO 2 for all effects, providing type-safe, composable, and performant functional programming.
-
-* **ZIO HTTP**: REST API is implemented using ZIO HTTP, providing native ZIO integration without the need for Pekko/Akka.
-
-* **ZIO STM for Concurrency**: The in-memory data store uses ZIO's Software Transactional Memory (STM) with `TMap` for thread-safe, atomic operations on accounts. This eliminates the need for manual locking and ensures consistent concurrent transfers.
-
-* **Service Pattern**: Following ZIO best practices, the application uses the service pattern with ZLayers instead of tagless final style:
-  - `AccountGateway` - Data access layer
-  - `Logger` - Logging service
-  - `AccountTransferService` - Business logic layer
-
-* **ZIO Test**: All tests are written using ZIO Test framework, providing better integration with ZIO effects and more expressive test assertions.
-
-* The account data structure has been kept simple for the initial design:
-```
+```scala
 final case class CurrencyAccount(
-    accountNumber: AccountNumber,
-    balance: CurrencyAmount,
-    currency: Currency
+  accountNumber: AccountNumber,
+  balance: CurrencyAmount,
+  currency: Currency
 )
 ```
 
-* Business logic is kept separate from infrastructure (datastore, HTTP). The ZLayer composition allows for easy testing and swapping of implementations. 
+## Possible next steps
 
+- A history of transfers on each account.
+- Transfers between currencies, using an external rates service.
 
-#### Nice to haves
-* An account lineage attached to the account, would show what transfer occurred at what time.
-* Transfer between different currency types, could be achieved from an external service.
+## License
 
-### Authors
-* **Matthew Jones**
-
+MIT. See [LICENSE](LICENSE).
