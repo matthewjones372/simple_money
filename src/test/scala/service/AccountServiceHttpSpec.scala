@@ -1,6 +1,6 @@
 package service
 
-import domain.{AccountNumber, CurrencyAccount, CurrencyAmount}
+import domain.{AccountNumber, CurrencyAccount, CurrencyAmount, IdempotencyKey, TransferOutcome}
 import java.util.Currency
 import zio._
 import zio.test._
@@ -11,7 +11,17 @@ import service.TransferServiceErrors._
 object AccountServiceHttpSpec extends ZIOSpecDefault {
 
   val testLayer: ULayer[AccountService & AccountTransferService] =
-    AccountService.layer ++ AccountTransferService.layer
+    AccountService.layer >+> AccountTransferService.layer
+
+  // Each call is a new transfer, so it gets a fresh idempotency key
+  def accountTransfer(
+    from: AccountNumber,
+    to: AccountNumber,
+    amount: CurrencyAmount
+  ): ZIO[AccountTransferService, TransferServiceErrors, TransferOutcome] =
+    Random.nextUUID.flatMap(uuid =>
+      AccountTransferService.accountTransfer(IdempotencyKey(uuid.toString), from, to, amount)
+    )
 
   val gbp: Currency = Currency.getInstance("GBP")
   val eur: Currency = Currency.getInstance("EUR")
@@ -48,7 +58,7 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
     test("transferBetweenAccounts should update both accounts if sufficient funds are present") {
       for {
         _               <- setupAccounts
-        _               <- AccountTransferService.accountTransfer(accountWithPositiveFunds, accountWithGBP, CurrencyAmount(5))
+        _               <- accountTransfer(accountWithPositiveFunds, accountWithGBP, CurrencyAmount(5))
         updatedAccount1 <- AccountService.getAccount(accountWithPositiveFunds)
         updatedAccount2 <- AccountService.getAccount(accountWithGBP)
       } yield assertTrue(
@@ -59,11 +69,11 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
     test("should allow multiple payments") {
       for {
         _               <- setupAccounts
-        _               <- AccountTransferService.accountTransfer(accountWithPositiveFunds, accountWithGBP, CurrencyAmount(10))
-        _               <- AccountTransferService.accountTransfer(accountWithPositiveFunds, accountWithGBP, CurrencyAmount(10))
-        _               <- AccountTransferService.accountTransfer(accountWithPositiveFunds, accountWithGBP, CurrencyAmount(10))
-        _               <- AccountTransferService.accountTransfer(accountWithPositiveFunds, accountWithGBP, CurrencyAmount(10))
-        _               <- AccountTransferService.accountTransfer(accountWithPositiveFunds, accountWithGBP, CurrencyAmount(10))
+        _               <- accountTransfer(accountWithPositiveFunds, accountWithGBP, CurrencyAmount(10))
+        _               <- accountTransfer(accountWithPositiveFunds, accountWithGBP, CurrencyAmount(10))
+        _               <- accountTransfer(accountWithPositiveFunds, accountWithGBP, CurrencyAmount(10))
+        _               <- accountTransfer(accountWithPositiveFunds, accountWithGBP, CurrencyAmount(10))
+        _               <- accountTransfer(accountWithPositiveFunds, accountWithGBP, CurrencyAmount(10))
         updatedAccount1 <- AccountService.getAccount(accountWithPositiveFunds)
         updatedAccount2 <- AccountService.getAccount(accountWithGBP)
       } yield assertTrue(
@@ -75,14 +85,14 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
       val nonExistingAccount = AccountNumber("SOME_NON_EXISTING_ACCOUNT")
       for {
         _      <- setupAccounts
-        result <- AccountTransferService.accountTransfer(nonExistingAccount, accountWithGBP, CurrencyAmount(2)).either
+        result <- accountTransfer(nonExistingAccount, accountWithGBP, CurrencyAmount(2)).either
       } yield assertTrue(result == Left(AccountDoesNotExist))
     }.provide(testLayer),
     test("should not transfer funds when a negative transfer is requested") {
       for {
         _ <- setupAccounts
         result <-
-          AccountTransferService.accountTransfer(accountWithGBP, accountWithPositiveFunds, CurrencyAmount(-100)).either
+          accountTransfer(accountWithGBP, accountWithPositiveFunds, CurrencyAmount(-100)).either
       } yield assertTrue(result == Left(CannotTransferNegativeAmount))
     }.provide(testLayer),
     test("should not transfer funds when there is no account to transfer to") {
@@ -90,7 +100,7 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
       for {
         _ <- setupAccounts
         result <-
-          AccountTransferService.accountTransfer(accountWithPositiveFunds, nonExistingAccount, CurrencyAmount(2)).either
+          accountTransfer(accountWithPositiveFunds, nonExistingAccount, CurrencyAmount(2)).either
         account <- AccountService.getAccount(accountWithPositiveFunds)
       } yield assertTrue(
         result == Left(AccountDoesNotExist),
@@ -100,8 +110,7 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
     test("should not transfer when funds are not sufficient") {
       for {
         _ <- setupAccounts
-        result <- AccountTransferService
-                    .accountTransfer(accountWithNegativeFunds, accountWithPositiveFunds, CurrencyAmount(200))
+        result <- accountTransfer(accountWithNegativeFunds, accountWithPositiveFunds, CurrencyAmount(200))
                     .either
         account1 <- AccountService.getAccount(accountWithNegativeFunds)
         account2 <- AccountService.getAccount(accountWithPositiveFunds)
@@ -114,8 +123,7 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
     test("should not be able to transfer between the same account") {
       for {
         _ <- setupAccounts
-        result <- AccountTransferService
-                    .accountTransfer(accountWithPositiveFunds, accountWithPositiveFunds, CurrencyAmount(30))
+        result <- accountTransfer(accountWithPositiveFunds, accountWithPositiveFunds, CurrencyAmount(30))
                     .either
         account <- AccountService.getAccount(accountWithPositiveFunds)
       } yield assertTrue(
@@ -126,7 +134,7 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
     test("should not be able to transfer between different currencies") {
       for {
         _      <- setupAccounts
-        result <- AccountTransferService.accountTransfer(accountWithGBP, accountWithEur, CurrencyAmount(30)).either
+        result <- accountTransfer(accountWithGBP, accountWithEur, CurrencyAmount(30)).either
       } yield assertTrue(result == Left(CannotTransferToAccountWithDifferentCurrency))
     }.provide(testLayer),
     test("should complete concurrent transfers without losing funds") {
@@ -137,7 +145,7 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
         _ <- AccountService.postAccount(CurrencyAccount(fromAccount, CurrencyAmount(500), gbp))
         _ <- AccountService.postAccount(CurrencyAccount(toAccount, CurrencyAmount(0), gbp))
         transfers = ZIO.foreachPar(1 to 100) { _ =>
-                      AccountTransferService.accountTransfer(fromAccount, toAccount, CurrencyAmount(1))
+                      accountTransfer(fromAccount, toAccount, CurrencyAmount(1))
                     }
         _           <- transfers
         fromBalance <- AccountService.getAccount(fromAccount).map(_.balance)
@@ -145,6 +153,29 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
       } yield assertTrue(
         fromBalance == CurrencyAmount(400),
         toBalance == CurrencyAmount(100)
+      )
+    }.provide(testLayer),
+    test("should apply concurrent retries of one transfer once") {
+      val fromAccount = AccountNumber("RETRIED_FROM")
+      val toAccount   = AccountNumber("RETRIED_TO")
+
+      for {
+        _ <- AccountService.postAccount(CurrencyAccount(fromAccount, CurrencyAmount(500), gbp))
+        _ <- AccountService.postAccount(CurrencyAccount(toAccount, CurrencyAmount(0), gbp))
+        outcomes <- ZIO.foreachPar(1 to 100) { _ =>
+                      AccountTransferService.accountTransfer(
+                        IdempotencyKey("retried"),
+                        fromAccount,
+                        toAccount,
+                        CurrencyAmount(1)
+                      )
+                    }
+        fromBalance <- AccountService.getAccount(fromAccount).map(_.balance)
+        toBalance   <- AccountService.getAccount(toAccount).map(_.balance)
+      } yield assertTrue(
+        outcomes.count(_.isInstanceOf[TransferOutcome.Applied]) == 1,
+        fromBalance == CurrencyAmount(499),
+        toBalance == CurrencyAmount(1)
       )
     }.provide(testLayer)
   ).provideLayer(

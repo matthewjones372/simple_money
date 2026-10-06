@@ -1,46 +1,49 @@
 package service
 
-import domain.{AccountNumber, CurrencyAccount, CurrencyAmount}
+import domain.{AccountNumber, CurrencyAccount, CurrencyAmount, IdempotencyKey, TransferInstruction, TransferOutcome}
 import zio._
-import service.AccountService
 import service.TransferServiceErrors._
 
 import java.util.Currency
 
+final class AccountTransferService(accounts: AccountService):
 
+  def listAllAccounts: UIO[Seq[CurrencyAccount]] =
+    accounts.getAllAccounts
 
-case class AccountTransferService():
-
-  def listAllAccounts: URIO[AccountService, Seq[CurrencyAccount]] =
-    AccountService.getAllAccounts
-
-  def addNewAccount(account: CurrencyAccount): ZIO[AccountService, TransferServiceErrors, Unit] =
+  def addNewAccount(account: CurrencyAccount): IO[TransferServiceErrors, Unit] =
     for
       _ <- ZIO.fromEither(nonNegativeOpeningBalance(account.balance))
       _ <- ZIO.fromEither(fitsCurrency(account.balance, account.currency))
-      _ <- AccountService.postAccount(account)
+      _ <- accounts.postAccount(account)
     yield ()
 
   def accountTransfer(
-                       fromAccountNumber: AccountNumber,
-                       toAccountNumber: AccountNumber,
-                       transferAmount: CurrencyAmount
-                     ): ZIO[AccountService, TransferServiceErrors, Unit] =
+    key: IdempotencyKey,
+    fromAccountNumber: AccountNumber,
+    toAccountNumber: AccountNumber,
+    transferAmount: CurrencyAmount
+  ): IO[TransferServiceErrors, TransferOutcome] =
+    val instruction = TransferInstruction(fromAccountNumber, toAccountNumber, transferAmount)
     for
       _ <- ZIO.fromEither(nonNegativeTransferAmount(transferAmount))
       _ <- ZIO.fromEither(areDifferentAccounts(fromAccountNumber, toAccountNumber))
-      transferResult <- AccountService.transfer(fromAccountNumber, toAccountNumber): (fromAccount, toAccount) =>
-        for
-          _ <- haveSameCurrency(fromAccount, toAccount)
-          _ <- fitsCurrency(transferAmount, fromAccount.currency)
-          _ <- hasSufficientBalance(fromAccount, transferAmount)
-        yield (
-          subtractBalance(fromAccount, transferAmount),
-          addBalance(toAccount, transferAmount)
-        )
-      _ <- ZIO.logInfo(updatedLogMessage(transferResult.fromBefore, transferResult.fromAfter))
-      _ <- ZIO.logInfo(updatedLogMessage(transferResult.toBefore, transferResult.toAfter))
-    yield ()
+      outcome <- accounts.transfer(key, instruction): (fromAccount, toAccount) =>
+                   for
+                     _ <- haveSameCurrency(fromAccount, toAccount)
+                     _ <- fitsCurrency(transferAmount, fromAccount.currency)
+                     _ <- hasSufficientBalance(fromAccount, transferAmount)
+                   yield (
+                     subtractBalance(fromAccount, transferAmount),
+                     addBalance(toAccount, transferAmount)
+                   )
+      _ <- outcome match
+             case TransferOutcome.Applied(transfer) =>
+               ZIO.logInfo(updatedLogMessage(transfer.fromBefore, transfer.fromAfter)) *>
+                 ZIO.logInfo(updatedLogMessage(transfer.toBefore, transfer.toAfter))
+             case TransferOutcome.Replayed(_) =>
+               ZIO.logInfo(s"Transfer ${key.value} was already applied, so it was not applied again")
+    yield outcome
 
   private def subtractBalance(fromAccount: CurrencyAccount, transferAmount: CurrencyAmount): CurrencyAccount =
     fromAccount.copy(balance = fromAccount.balance - transferAmount)
@@ -73,46 +76,48 @@ case class AccountTransferService():
       Left(AmountHasTooManyDecimalPlaces)
 
   private def hasSufficientBalance(
-                                    account: CurrencyAccount,
-                                    transferAmount: CurrencyAmount
-                                  ): Either[TransferServiceErrors, Unit] =
+    account: CurrencyAccount,
+    transferAmount: CurrencyAmount
+  ): Either[TransferServiceErrors, Unit] =
     if account.balance >= transferAmount then
       Right(())
     else
       Left(AccountHasInsufficientFunds)
 
   private def haveSameCurrency(
-                                toAccount: CurrencyAccount,
-                                fromAccount: CurrencyAccount
-                              ): Either[TransferServiceErrors, Unit] =
-    if toAccount.currency.equals(fromAccount.currency) then
+    fromAccount: CurrencyAccount,
+    toAccount: CurrencyAccount
+  ): Either[TransferServiceErrors, Unit] =
+    if fromAccount.currency.equals(toAccount.currency) then
       Right(())
     else
       Left(CannotTransferToAccountWithDifferentCurrency)
 
   private def areDifferentAccounts(
-                                    fromAccountNumber: AccountNumber,
-                                    toAccountNumber: AccountNumber
-                                  ): Either[TransferServiceErrors, Unit] =
+    fromAccountNumber: AccountNumber,
+    toAccountNumber: AccountNumber
+  ): Either[TransferServiceErrors, Unit] =
     if fromAccountNumber != toAccountNumber then
       Right(())
     else
       Left(CannotTransferToSameAccount)
 
 object AccountTransferService:
-  val layer: ULayer[AccountTransferService] = ZLayer.succeed(AccountTransferService())
+  val layer: URLayer[AccountService, AccountTransferService] =
+    ZLayer.fromFunction(AccountTransferService(_))
 
-  def listAllAccounts: URIO[AccountService & AccountTransferService, Seq[CurrencyAccount]] =
+  def listAllAccounts: URIO[AccountTransferService, Seq[CurrencyAccount]] =
     ZIO.serviceWithZIO[AccountTransferService](_.listAllAccounts)
 
-  def addNewAccount(
-    account: CurrencyAccount
-  ): ZIO[AccountService & AccountTransferService, TransferServiceErrors, Unit] =
+  def addNewAccount(account: CurrencyAccount): ZIO[AccountTransferService, TransferServiceErrors, Unit] =
     ZIO.serviceWithZIO[AccountTransferService](_.addNewAccount(account))
 
   def accountTransfer(
+    key: IdempotencyKey,
     fromAccountNumber: AccountNumber,
     toAccountNumber: AccountNumber,
     transferAmount: CurrencyAmount
-  ): ZIO[AccountService & AccountTransferService, TransferServiceErrors, Unit] =
-    ZIO.serviceWithZIO[AccountTransferService](_.accountTransfer(fromAccountNumber, toAccountNumber, transferAmount))
+  ): ZIO[AccountTransferService, TransferServiceErrors, TransferOutcome] =
+    ZIO.serviceWithZIO[AccountTransferService](
+      _.accountTransfer(key, fromAccountNumber, toAccountNumber, transferAmount)
+    )

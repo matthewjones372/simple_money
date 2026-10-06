@@ -32,7 +32,7 @@ sbt test
 |---|---|---|
 | GET | `/api/accounts` | |
 | POST | `/api/accounts` | `accountNumber`, `balance`, `currencyCode` |
-| PUT | `/api/accounts/transfer` | `fromAccountNumber`, `toAccountNumber`, `amount` |
+| POST | `/api/accounts/transfer` | `fromAccountNumber`, `toAccountNumber`, `amount`, plus an `Idempotency-Key` header |
 
 ### Create an account
 
@@ -74,7 +74,10 @@ curl localhost:8081/api/accounts
 ### Transfer
 
 ```
-curl -X PUT localhost:8081/api/accounts/transfer -H 'Content-Type: application/json' -d '{
+curl -X POST localhost:8081/api/accounts/transfer \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: 6f1c2e4a-0b7d-4a51-9a3e-2d8f5c1b7e90' \
+  -d '{
   "fromAccountNumber": "GB29 NWBK 3242 1331 9268 19",
   "toAccountNumber": "GB29 NWBK 6016 1331 3282 19",
   "amount": 58.60
@@ -85,6 +88,11 @@ curl -X PUT localhost:8081/api/accounts/transfer -H 'Content-Type: application/j
 {"message": "58.60 has been transferred from GB29 NWBK 3242 1331 9268 19 to GB29 NWBK 6016 1331 3282 19"}
 ```
 
+Every transfer needs an `Idempotency-Key` header, a value the caller makes up for that transfer, such as a UUID. If a
+request is retried with the same key and the same body, the transfer is not made again and the original success is
+returned, so a caller can safely retry after a timeout. Reusing a key with a different body is refused. A transfer that
+fails is not recorded, so retrying it with the same key tries again.
+
 A transfer that cannot be made returns `400 Bad Request` with one of these errors:
 
 - `AccountDoesNotExist`
@@ -93,13 +101,17 @@ A transfer that cannot be made returns `400 Bad Request` with one of these error
 - `CannotTransferToSameAccount`
 - `CannotTransferToAccountWithDifferentCurrency`
 - `CannotTransferNegativeAmount`
+- `IdempotencyKeyIsBlank`
+- `IdempotencyKeyReusedForDifferentTransfer`
 
 ## Design
 
-- Layers: `AccountService` holds the accounts, and `AccountTransferService` holds the transfer rules. Both are
-  ZLayers, so the tests can provide their own.
+- Layers: `AccountService` holds the accounts, and `AccountTransferService` holds the transfer rules and is built
+  from an `AccountService`. Both are ZLayers, so the tests can provide their own.
 - Atomic transfers: Accounts live in a `TMap`. A transfer reads both accounts, checks the rules and writes both
-  balances in one STM transaction, so concurrent transfers cannot lose or create money. One of the tests runs many
+  balances in one STM transaction, so concurrent transfers cannot lose or create money. The same transaction records
+  the transfer against its idempotency key, so concurrent retries of one transfer apply it once. Recorded keys are
+  kept in memory for the life of the process, like the accounts. One of the tests runs many
   transfers at once and checks the total is unchanged.
 - Errors as values: Failures are a sealed `TransferServiceErrors` type in the ZIO error channel rather than
   exceptions.

@@ -12,9 +12,8 @@ object SimpleMoney extends ZIOAppDefault:
 
   private val port: Int = 8081
 
-  private val appLayer: ULayer[AccountService & AccountTransferService] =
-    AccountService.layer ++
-      AccountTransferService.layer
+  private val appLayer: ULayer[AccountTransferService] =
+    AccountService.layer >>> AccountTransferService.layer
 
   private val swaggerRoutes: Routes[Any, Response] =
     SwaggerUI.routes("docs", AccountRoutes.openAPISpec)
