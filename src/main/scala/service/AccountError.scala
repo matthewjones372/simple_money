@@ -2,7 +2,7 @@ package service
 
 sealed trait AccountError
 
-object AccountError {
+object AccountError:
   case object AccountDoesNotExist extends AccountError
 
   case object AccountHasInsufficientFunds extends AccountError
@@ -26,4 +26,3 @@ object AccountError {
   case object IdempotencyKeyIsBlank extends AccountError
 
   case object InvalidPageSize extends AccountError
-}

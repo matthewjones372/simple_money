@@ -3,7 +3,7 @@ package apps
 import zio.*
 import zio.test.*
 
-object SimpleMoneySpec extends ZIOSpecDefault {
+object SimpleMoneySpec extends ZIOSpecDefault:
 
   def portFrom(settings: Map[String, String]): IO[Config.Error, Int] =
     ZIO.config(SimpleMoney.portConfig).withConfigProvider(ConfigProvider.fromMap(settings))
@@ -19,4 +19,3 @@ object SimpleMoneySpec extends ZIOSpecDefault {
       portFrom(Map("port" -> "eighty")).either.map(result => assertTrue(result.isLeft))
     }
   )
-}

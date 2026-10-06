@@ -2,11 +2,11 @@ package service
 
 import domain.{AccountNumber, CurrencyAccount, IdempotencyKey, Money, TransferOutcome}
 import java.util.Currency
-import zio._
-import zio.test._
-import AccountError._
+import zio.*
+import zio.test.*
+import AccountError.*
 
-object AccountTransferServiceSpec extends ZIOSpecDefault {
+object AccountTransferServiceSpec extends ZIOSpecDefault:
 
   val testLayer: ULayer[AccountService & AccountTransferService] =
     AccountService.layer >+> AccountTransferService.layer
@@ -36,30 +36,30 @@ object AccountTransferServiceSpec extends ZIOSpecDefault {
   val accountWithNegativeFunds = AccountNumber("ACCOUNT_WITH_NEGATIVE_FUNDS")
   val negativeAccount          = CurrencyAccount(accountWithNegativeFunds, Money(-19.99, gbp))
 
-  def setupAccounts: ZIO[AccountService, AccountError, Unit] = for {
+  def setupAccounts: ZIO[AccountService, AccountError, Unit] = for
     _ <- AccountService.postAccount(positiveAccount)
     _ <- AccountService.postAccount(GBPAccount)
     _ <- AccountService.postAccount(EURAccount)
     _ <- AccountService.postAccount(negativeAccount)
-  } yield ()
+  yield ()
 
   def spec = suite("AccountTransferServiceSpec")(
     test("listAccounts should return every account when they fit on one page") {
-      for {
+      for
         _    <- setupAccounts
         page <- AccountTransferService.listAccounts(None, 100)
-      } yield assertTrue(
+      yield assertTrue(
         page.accounts.size == 4,
         page.accounts.exists(_.accountNumber == accountWithPositiveFunds),
         page.next.isEmpty
       )
     }.provide(testLayer),
     test("listAccounts should page through accounts in account number order") {
-      for {
+      for
         _      <- setupAccounts
         first  <- AccountTransferService.listAccounts(None, 3)
         second <- AccountTransferService.listAccounts(first.next, 3)
-      } yield assertTrue(
+      yield assertTrue(
         first.accounts.map(_.accountNumber) ==
           Seq(accountWithEur, accountWithGBP, accountWithNegativeFunds),
         first.next.contains(accountWithNegativeFunds),
@@ -68,29 +68,29 @@ object AccountTransferServiceSpec extends ZIOSpecDefault {
       )
     }.provide(testLayer),
     test("listAccounts should refuse a page size outside 1 to 1000") {
-      for {
+      for
         zero    <- AccountTransferService.listAccounts(None, 0).either
         tooMany <- AccountTransferService.listAccounts(None, 1001).either
         largest <- AccountTransferService.listAccounts(None, 1000).either
-      } yield assertTrue(
+      yield assertTrue(
         zero == Left(InvalidPageSize),
         tooMany == Left(InvalidPageSize),
         largest.isRight
       )
     }.provide(testLayer),
     test("transferBetweenAccounts should update both accounts if sufficient funds are present") {
-      for {
+      for
         _               <- setupAccounts
         _               <- accountTransfer(accountWithPositiveFunds, accountWithGBP, BigDecimal(5))
         updatedAccount1 <- AccountService.getAccount(accountWithPositiveFunds)
         updatedAccount2 <- AccountService.getAccount(accountWithGBP)
-      } yield assertTrue(
+      yield assertTrue(
         updatedAccount1.balance.amount == BigDecimal(95),
         updatedAccount2.balance.amount == BigDecimal(205)
       )
     }.provide(testLayer),
     test("logs a transfer without whole account numbers or balances") {
-      for {
+      for
         _ <- setupAccounts
         _ <- AccountTransferService.accountTransfer(
                IdempotencyKey("logged"),
@@ -106,7 +106,7 @@ object AccountTransferServiceSpec extends ZIOSpecDefault {
              )
         output  <- ZTestLogger.logOutput
         messages = output.map(_.message())
-      } yield assertTrue(
+      yield assertTrue(
         messages.contains("Transfer logged moved 5 GBP from ****TIVE to ****_GBP"),
         messages.contains("Transfer logged was already applied, so it was not applied again"),
         !messages.exists(message =>
@@ -116,7 +116,7 @@ object AccountTransferServiceSpec extends ZIOSpecDefault {
       )
     }.provide(testLayer),
     test("should allow multiple payments") {
-      for {
+      for
         _               <- setupAccounts
         _               <- accountTransfer(accountWithPositiveFunds, accountWithGBP, BigDecimal(10))
         _               <- accountTransfer(accountWithPositiveFunds, accountWithGBP, BigDecimal(10))
@@ -125,70 +125,70 @@ object AccountTransferServiceSpec extends ZIOSpecDefault {
         _               <- accountTransfer(accountWithPositiveFunds, accountWithGBP, BigDecimal(10))
         updatedAccount1 <- AccountService.getAccount(accountWithPositiveFunds)
         updatedAccount2 <- AccountService.getAccount(accountWithGBP)
-      } yield assertTrue(
+      yield assertTrue(
         updatedAccount1.balance.amount == BigDecimal(50),
         updatedAccount2.balance.amount == BigDecimal(250)
       )
     }.provide(testLayer),
     test("should not transfer funds when an account does not exist") {
       val nonExistingAccount = AccountNumber("SOME_NON_EXISTING_ACCOUNT")
-      for {
+      for
         _      <- setupAccounts
         result <- accountTransfer(nonExistingAccount, accountWithGBP, BigDecimal(2)).either
-      } yield assertTrue(result == Left(AccountDoesNotExist))
+      yield assertTrue(result == Left(AccountDoesNotExist))
     }.provide(testLayer),
     test("should not transfer funds when a negative transfer is requested") {
-      for {
+      for
         _      <- setupAccounts
         result <-
           accountTransfer(accountWithGBP, accountWithPositiveFunds, BigDecimal(-100)).either
-      } yield assertTrue(result == Left(TransferAmountNotPositive))
+      yield assertTrue(result == Left(TransferAmountNotPositive))
     }.provide(testLayer),
     test("should not transfer funds when there is no account to transfer to") {
       val nonExistingAccount = AccountNumber("SOME_NON_EXISTING_ACCOUNT")
-      for {
+      for
         _      <- setupAccounts
         result <-
           accountTransfer(accountWithPositiveFunds, nonExistingAccount, BigDecimal(2)).either
         account <- AccountService.getAccount(accountWithPositiveFunds)
-      } yield assertTrue(
+      yield assertTrue(
         result == Left(AccountDoesNotExist),
         account.balance.amount == BigDecimal(100.0)
       )
     }.provide(testLayer),
     test("should not transfer when funds are not sufficient") {
-      for {
+      for
         _        <- setupAccounts
         result   <- accountTransfer(accountWithNegativeFunds, accountWithPositiveFunds, BigDecimal(200)).either
         account1 <- AccountService.getAccount(accountWithNegativeFunds)
         account2 <- AccountService.getAccount(accountWithPositiveFunds)
-      } yield assertTrue(
+      yield assertTrue(
         result == Left(AccountHasInsufficientFunds),
         account1.balance.amount == BigDecimal(-19.99),
         account2.balance.amount == BigDecimal(100)
       )
     }.provide(testLayer),
     test("should not be able to transfer between the same account") {
-      for {
+      for
         _       <- setupAccounts
         result  <- accountTransfer(accountWithPositiveFunds, accountWithPositiveFunds, BigDecimal(30)).either
         account <- AccountService.getAccount(accountWithPositiveFunds)
-      } yield assertTrue(
+      yield assertTrue(
         result == Left(CannotTransferToSameAccount),
         account.balance.amount == BigDecimal(100)
       )
     }.provide(testLayer),
     test("should not be able to transfer between different currencies") {
-      for {
+      for
         _      <- setupAccounts
         result <- accountTransfer(accountWithGBP, accountWithEur, BigDecimal(30)).either
-      } yield assertTrue(result == Left(CannotTransferToAccountWithDifferentCurrency))
+      yield assertTrue(result == Left(CannotTransferToAccountWithDifferentCurrency))
     }.provide(testLayer),
     test("should complete concurrent transfers without losing funds") {
       val fromAccount = AccountNumber("CONCURRENT_FROM")
       val toAccount   = AccountNumber("CONCURRENT_TO")
 
-      for {
+      for
         _        <- AccountService.postAccount(CurrencyAccount(fromAccount, Money(500, gbp)))
         _        <- AccountService.postAccount(CurrencyAccount(toAccount, Money(0, gbp)))
         transfers = ZIO.foreachPar(1 to 100) { _ =>
@@ -197,7 +197,7 @@ object AccountTransferServiceSpec extends ZIOSpecDefault {
         _           <- transfers
         fromBalance <- AccountService.getAccount(fromAccount).map(_.balance.amount)
         toBalance   <- AccountService.getAccount(toAccount).map(_.balance.amount)
-      } yield assertTrue(
+      yield assertTrue(
         fromBalance == BigDecimal(400),
         toBalance == BigDecimal(100)
       )
@@ -206,7 +206,7 @@ object AccountTransferServiceSpec extends ZIOSpecDefault {
       val fromAccount = AccountNumber("RETRIED_FROM")
       val toAccount   = AccountNumber("RETRIED_TO")
 
-      for {
+      for
         _        <- AccountService.postAccount(CurrencyAccount(fromAccount, Money(500, gbp)))
         _        <- AccountService.postAccount(CurrencyAccount(toAccount, Money(0, gbp)))
         outcomes <- ZIO.foreachPar(1 to 100) { _ =>
@@ -219,7 +219,7 @@ object AccountTransferServiceSpec extends ZIOSpecDefault {
                     }
         fromBalance <- AccountService.getAccount(fromAccount).map(_.balance.amount)
         toBalance   <- AccountService.getAccount(toAccount).map(_.balance.amount)
-      } yield assertTrue(
+      yield assertTrue(
         outcomes.count(_.isInstanceOf[TransferOutcome.Applied]) == 1,
         fromBalance == BigDecimal(499),
         toBalance == BigDecimal(1)
@@ -229,7 +229,7 @@ object AccountTransferServiceSpec extends ZIOSpecDefault {
       val fromAccount = AccountNumber("OVERDRAWN_FROM")
       val toAccount   = AccountNumber("OVERDRAWN_TO")
 
-      for {
+      for
         _       <- AccountService.postAccount(CurrencyAccount(fromAccount, Money(100, gbp)))
         _       <- AccountService.postAccount(CurrencyAccount(toAccount, Money(0, gbp)))
         results <- ZIO.foreachPar(1 to 250) { _ =>
@@ -237,7 +237,7 @@ object AccountTransferServiceSpec extends ZIOSpecDefault {
                    }
         fromBalance <- AccountService.getAccount(fromAccount).map(_.balance.amount)
         toBalance   <- AccountService.getAccount(toAccount).map(_.balance.amount)
-      } yield assertTrue(
+      yield assertTrue(
         results.count(_.isRight) == 100,
         results.collect { case Left(error) => error }.forall(_ == AccountHasInsufficientFunds),
         fromBalance == BigDecimal(0),
@@ -250,7 +250,7 @@ object AccountTransferServiceSpec extends ZIOSpecDefault {
       val transfers =
         List.fill(200)((first, second, BigDecimal(3))) ++ List.fill(200)((second, first, BigDecimal(2)))
 
-      for {
+      for
         _        <- AccountService.postAccount(CurrencyAccount(first, Money(100, gbp)))
         _        <- AccountService.postAccount(CurrencyAccount(second, Money(100, gbp)))
         shuffled <- Random.shuffle(transfers)
@@ -261,7 +261,7 @@ object AccountTransferServiceSpec extends ZIOSpecDefault {
         secondBalance    <- AccountService.getAccount(second).map(_.balance.amount)
         appliedFromFirst  = results.count { case (from, result) => from == first && result.isRight }
         appliedFromSecond = results.count { case (from, result) => from == second && result.isRight }
-      } yield assertTrue(
+      yield assertTrue(
         firstBalance + secondBalance == BigDecimal(200),
         firstBalance >= 0,
         secondBalance >= 0,
@@ -272,4 +272,3 @@ object AccountTransferServiceSpec extends ZIOSpecDefault {
   ).provideLayer(
     Runtime.removeDefaultLoggers >>> ZTestLogger.default
   )
-}

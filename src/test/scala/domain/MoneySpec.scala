@@ -4,7 +4,7 @@ import java.util.Currency
 import zio.*
 import zio.test.*
 
-object MoneySpec extends ZIOSpecDefault {
+object MoneySpec extends ZIOSpecDefault:
 
   val gbp: Currency = Currency.getInstance("GBP")
   val eur: Currency = Currency.getInstance("EUR")
@@ -25,11 +25,11 @@ object MoneySpec extends ZIOSpecDefault {
       )
     },
     test("refuses to combine amounts of different currencies") {
-      for {
+      for
         sum        <- ZIO.attempt(Money(10, gbp) + Money(1, eur)).either
         difference <- ZIO.attempt(Money(10, gbp) - Money(1, eur)).either
         comparison <- ZIO.attempt(Money(10, gbp) >= Money(1, eur)).either
-      } yield assertTrue(
+      yield assertTrue(
         sum.left.exists(_.isInstanceOf[IllegalArgumentException]),
         difference.isLeft,
         comparison.isLeft
@@ -49,4 +49,3 @@ object MoneySpec extends ZIOSpecDefault {
       assertTrue(Money(-0.01, gbp).isNegative, !Money(0, gbp).isNegative)
     }
   )
-}

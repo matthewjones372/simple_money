@@ -1,8 +1,8 @@
 package service
 
 import domain.{AccountNumber, AccountPage, CurrencyAccount, IdempotencyKey, Money, TransferInstruction, TransferOutcome}
-import zio._
-import service.AccountError._
+import zio.*
+import service.AccountError.*
 
 final class AccountTransferService(accounts: AccountService):
 

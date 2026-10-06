@@ -10,11 +10,11 @@ import domain.{
   TransferOutcome
 }
 import java.util.Currency
-import zio._
-import zio.test._
-import AccountError._
+import zio.*
+import zio.test.*
+import AccountError.*
 
-object AccountServiceSpec extends ZIOSpecDefault {
+object AccountServiceSpec extends ZIOSpecDefault:
 
   val gbp: Currency = Currency.getInstance("GBP")
   val testAccount   = CurrencyAccount(AccountNumber("TEST_ACCOUNT"), Money(100, gbp))
@@ -38,41 +38,40 @@ object AccountServiceSpec extends ZIOSpecDefault {
       )
     },
     test("should successfully post a new account") {
-      for {
+      for
         _         <- AccountService.postAccount(testAccount)
         retrieved <- AccountService.getAccount(testAccount.accountNumber)
-      } yield assertTrue(retrieved == testAccount)
+      yield assertTrue(retrieved == testAccount)
     },
     test("should fail to post duplicate account") {
-      for {
+      for
         _      <- AccountService.postAccount(testAccount)
         result <- AccountService.postAccount(testAccount).either
-      } yield assertTrue(result == Left(AccountAlreadyExists))
+      yield assertTrue(result == Left(AccountAlreadyExists))
     },
     test("should retrieve all accounts") {
       val account1 = CurrencyAccount(AccountNumber("ACCOUNT_1"), Money(100, gbp))
       val account2 = CurrencyAccount(AccountNumber("ACCOUNT_2"), Money(200, gbp))
 
-      for {
+      for
         _   <- AccountService.postAccount(account1)
         _   <- AccountService.postAccount(account2)
         all <- AccountService.getAllAccounts
-      } yield assertTrue(
+      yield assertTrue(
         all.size == 2,
         all.contains(account1),
         all.contains(account2)
       )
     },
     test("should fail to get non-existent account") {
-      for {
-        result <- AccountService.getAccount(AccountNumber("NON_EXISTENT")).either
-      } yield assertTrue(result == Left(AccountDoesNotExist))
+      for result <- AccountService.getAccount(AccountNumber("NON_EXISTENT")).either
+      yield assertTrue(result == Left(AccountDoesNotExist))
     },
     test("should atomically modify two accounts") {
       val account1 = CurrencyAccount(AccountNumber("ATOMIC_1"), Money(100, gbp))
       val account2 = CurrencyAccount(AccountNumber("ATOMIC_2"), Money(50, gbp))
 
-      for {
+      for
         _      <- AccountService.postAccount(account1)
         _      <- AccountService.postAccount(account2)
         result <- AccountService.transfer(
@@ -81,7 +80,7 @@ object AccountServiceSpec extends ZIOSpecDefault {
                   )(moveTwentyFive)
         updated1 <- AccountService.getAccount(account1.accountNumber)
         updated2 <- AccountService.getAccount(account2.accountNumber)
-      } yield assertTrue(
+      yield assertTrue(
         updated1.balance.amount == BigDecimal(75),
         updated2.balance.amount == BigDecimal(75),
         result == TransferOutcome.Applied(
@@ -94,13 +93,13 @@ object AccountServiceSpec extends ZIOSpecDefault {
       val account2    = CurrencyAccount(AccountNumber("REPLAY_2"), Money(50, gbp))
       val instruction = TransferInstruction(account1.accountNumber, account2.accountNumber, BigDecimal(25))
 
-      for {
+      for
         _        <- AccountService.postAccount(account1)
         _        <- AccountService.postAccount(account2)
         first    <- AccountService.transfer(IdempotencyKey("replay"), instruction)(moveTwentyFive)
         second   <- AccountService.transfer(IdempotencyKey("replay"), instruction)(moveTwentyFive)
         updated1 <- AccountService.getAccount(account1.accountNumber)
-      } yield assertTrue(
+      yield assertTrue(
         first.isInstanceOf[TransferOutcome.Applied],
         second == TransferOutcome.Replayed(first.asInstanceOf[TransferOutcome.Applied].transfer),
         updated1.balance.amount == BigDecimal(75)
@@ -110,7 +109,7 @@ object AccountServiceSpec extends ZIOSpecDefault {
       val account1 = CurrencyAccount(AccountNumber("REUSE_1"), Money(100, gbp))
       val account2 = CurrencyAccount(AccountNumber("REUSE_2"), Money(50, gbp))
 
-      for {
+      for
         _ <- AccountService.postAccount(account1)
         _ <- AccountService.postAccount(account2)
         _ <- AccountService.transfer(
@@ -124,7 +123,7 @@ object AccountServiceSpec extends ZIOSpecDefault {
                     )(moveTwentyFive)
                     .either
         updated1 <- AccountService.getAccount(account1.accountNumber)
-      } yield assertTrue(
+      yield assertTrue(
         result == Left(IdempotencyKeyReusedForDifferentTransfer),
         updated1.balance.amount == BigDecimal(75)
       )
@@ -134,14 +133,14 @@ object AccountServiceSpec extends ZIOSpecDefault {
       val account2    = CurrencyAccount(AccountNumber("RETRY_2"), Money(50, gbp))
       val instruction = TransferInstruction(account1.accountNumber, account2.accountNumber, BigDecimal(25))
 
-      for {
+      for
         _      <- AccountService.postAccount(account1)
         _      <- AccountService.postAccount(account2)
         failed <- AccountService
                     .transfer(IdempotencyKey("retry"), instruction)((_, _) => Left(AccountHasInsufficientFunds))
                     .either
         retried <- AccountService.transfer(IdempotencyKey("retry"), instruction)(moveTwentyFive)
-      } yield assertTrue(
+      yield assertTrue(
         failed == Left(AccountHasInsufficientFunds),
         retried.isInstanceOf[TransferOutcome.Applied]
       )
@@ -150,4 +149,3 @@ object AccountServiceSpec extends ZIOSpecDefault {
     .provideLayer(
       Runtime.removeDefaultLoggers >>> ZTestLogger.default
     )
-}
