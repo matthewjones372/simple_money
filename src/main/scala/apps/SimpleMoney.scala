@@ -10,7 +10,8 @@ import zio.logging.backend.SLF4J
 
 object SimpleMoney extends ZIOAppDefault:
 
-  private val port: Int = 8081
+  // Read from the PORT environment variable or the port system property
+  val portConfig: Config[Int] = Config.int("port").withDefault(8081)
 
   private val appLayer: ULayer[AccountTransferService] =
     AccountService.layer >>> AccountTransferService.layer
@@ -25,12 +26,11 @@ object SimpleMoney extends ZIOAppDefault:
 
   override def run: ZIO[Any, Any, Any] =
     (for
-      _ <- ZIO.logInfo(s"Server online at http://localhost:$port/")
-      _ <- ZIO.logInfo(s"Swagger UI available at http://localhost:$port/docs")
-      _ <- ZIO.logInfo(s"API available at http://localhost:$port/api/accounts")
-      _ <- Server.serve(allRoutes)
+      port <- Server.install(allRoutes)
+      _    <- ZIO.logInfo(s"Listening on port $port, with Swagger UI at /docs and the API at /api/accounts")
+      _    <- ZIO.never
     yield ())
       .provide(
         appLayer,
-        Server.defaultWithPort(port)
+        ZLayer.fromZIO(ZIO.config(portConfig)).flatMap(port => Server.defaultWithPort(port.get))
       )
