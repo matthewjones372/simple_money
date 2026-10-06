@@ -7,8 +7,6 @@ final case class AccountTransfer(
   toAfter: CurrencyAccount
 )
 
-final case class IdempotencyKey(value: String) extends AnyVal
-
 final case class TransferInstruction(
   fromAccountNumber: AccountNumber,
   toAccountNumber: AccountNumber,

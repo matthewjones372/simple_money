@@ -1,6 +1,6 @@
 package http
 
-import service.{AccountService, AccountTransferService}
+import service.{AccountStore, AccountService}
 import zio.*
 import zio.http.*
 import zio.schema.Schema
@@ -10,10 +10,10 @@ import zio.test.*
 object AccountRoutesSpec extends ZIOSpecDefault:
   import Schemas.given
 
-  val testLayer: ULayer[AccountTransferService] =
-    AccountService.layer >>> AccountTransferService.layer
+  val testLayer: ULayer[AccountService] =
+    AccountStore.layer >>> AccountService.layer
 
-  def run(request: Request): ZIO[AccountTransferService, Nothing, Response] =
+  def run(request: Request): ZIO[AccountService, Nothing, Response] =
     ZIO.scoped(AccountRoutes.routes.runZIO(request))
 
   // Request.get(String) takes the string as a path, so a query string or percent-encoding would not be parsed

@@ -138,8 +138,8 @@ Every failure has a JSON body with a stable `error` code to match on and a `mess
 
 ## Design
 
-- Layers: `AccountService` holds the accounts, and `AccountTransferService` holds the transfer rules and is built
-  from an `AccountService`. Both are ZLayers, so the tests can provide their own.
+- Layers: `AccountStore` holds the accounts, and `AccountService` holds the rules for opening, listing and
+  transferring, and is built from an `AccountStore`. Both are ZLayers, so the tests can provide their own.
 - Atomic transfers: Accounts live in a `TMap`. A transfer reads both accounts, checks the rules and writes both
   balances in one STM transaction, so concurrent transfers cannot lose or create money. The same transaction records
   the transfer against its idempotency key, so concurrent retries of one transfer apply it once. Recorded keys are

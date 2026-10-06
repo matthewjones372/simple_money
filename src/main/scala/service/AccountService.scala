@@ -1,97 +1,133 @@
 package service
 
-import domain.{AccountNumber, AccountTransfer, CurrencyAccount, IdempotencyKey, TransferInstruction, TransferOutcome}
-import service.AccountError.{AccountAlreadyExists, AccountDoesNotExist, IdempotencyKeyReusedForDifferentTransfer}
+import domain.{AccountNumber, AccountPage, CurrencyAccount, IdempotencyKey, Money, TransferInstruction, TransferOutcome}
 import zio.*
-import zio.stm.{STM, TMap}
+import service.AccountError.*
 
-trait AccountService:
+final class AccountService(accounts: AccountStore):
 
-  def getAllAccounts: UIO[Seq[CurrencyAccount]]
-
-  def getAccount(accountNumber: AccountNumber): IO[AccountError, CurrencyAccount]
-
-  def postAccount(account: CurrencyAccount): IO[AccountError, Unit]
+  def getAccount(accountNumber: AccountNumber): IO[AccountError, CurrencyAccount] =
+    accounts.getAccount(accountNumber)
 
   /**
-   * Applies `update` to both accounts in one transaction and records the
-   * transfer against `key`. A later call with the same key and instruction
-   * returns the recorded transfer without applying it again.
+   * Accounts in account number order, starting after `after`, at most `limit`
+   * of them
    */
-  def transfer(key: IdempotencyKey, instruction: TransferInstruction)(
-    update: (CurrencyAccount, CurrencyAccount) => Either[AccountError, (CurrencyAccount, CurrencyAccount)]
-  ): IO[AccountError, TransferOutcome]
+  def listAccounts(after: Option[AccountNumber], limit: Int): IO[AccountError, AccountPage] =
+    for
+      _   <- ZIO.fromEither(validPageSize(limit))
+      all <- accounts.getAllAccounts
+    yield
+      val remaining = all
+        .sortBy(_.accountNumber.value)
+        .filter(account => after.forall(cursor => account.accountNumber.value > cursor.value))
+      val page = remaining.take(limit)
+      AccountPage(page, if remaining.sizeIs > limit then page.lastOption.map(_.accountNumber) else None)
+
+  def addNewAccount(account: CurrencyAccount): IO[AccountError, Unit] =
+    for
+      _ <- ZIO.fromEither(nonNegativeOpeningBalance(account.balance))
+      _ <- ZIO.fromEither(withinMaximum(account.balance.amount))
+      _ <- ZIO.fromEither(fitsMinorUnit(account.balance))
+      _ <- accounts.postAccount(account)
+    yield ()
+
+  def accountTransfer(
+    key: IdempotencyKey,
+    fromAccountNumber: AccountNumber,
+    toAccountNumber: AccountNumber,
+    transferAmount: BigDecimal
+  ): IO[AccountError, TransferOutcome] =
+    val instruction = TransferInstruction(fromAccountNumber, toAccountNumber, transferAmount)
+    for
+      _       <- ZIO.fromEither(positiveTransferAmount(transferAmount))
+      _       <- ZIO.fromEither(withinMaximum(transferAmount))
+      _       <- ZIO.fromEither(areDifferentAccounts(fromAccountNumber, toAccountNumber))
+      outcome <- accounts.transfer(key, instruction): (fromAccount, toAccount) =>
+                   val amount = Money(transferAmount, fromAccount.currency)
+                   for
+                     _ <- haveSameCurrency(fromAccount, toAccount)
+                     _ <- fitsMinorUnit(amount)
+                     _ <- hasSufficientBalance(fromAccount, amount)
+                   yield (
+                     fromAccount.copy(balance = fromAccount.balance - amount),
+                     toAccount.copy(balance = toAccount.balance + amount)
+                   )
+      _ <- outcome match
+             case TransferOutcome.Applied(transfer) =>
+               ZIO.logInfo(
+                 s"Transfer ${key.value} moved $transferAmount ${transfer.fromBefore.currency.getCurrencyCode} " +
+                   s"from ${fromAccountNumber.masked} to ${toAccountNumber.masked}"
+               )
+             case TransferOutcome.Replayed(_) =>
+               ZIO.logInfo(s"Transfer ${key.value} was already applied, so it was not applied again")
+    yield outcome
+
+  private def validPageSize(limit: Int): Either[AccountError, Unit] =
+    if limit >= 1 && limit <= AccountService.maxPageSize then Right(())
+    else Left(InvalidPageSize)
+
+  private def positiveTransferAmount(transferAmount: BigDecimal): Either[AccountError, Unit] =
+    if transferAmount > 0 then Right(())
+    else Left(TransferAmountNotPositive)
+
+  private def nonNegativeOpeningBalance(balance: Money): Either[AccountError, Unit] =
+    if !balance.isNegative then Right(())
+    else Left(CannotOpenAccountWithNegativeBalance)
+
+  private def withinMaximum(amount: BigDecimal): Either[AccountError, Unit] =
+    if Money.isWithinMaximum(amount) then Right(())
+    else Left(AmountTooLarge)
+
+  private def fitsMinorUnit(amount: Money): Either[AccountError, Unit] =
+    if amount.fitsMinorUnit then Right(())
+    else Left(AmountHasTooManyDecimalPlaces)
+
+  private def hasSufficientBalance(
+    account: CurrencyAccount,
+    transferAmount: Money
+  ): Either[AccountError, Unit] =
+    if account.balance >= transferAmount then Right(())
+    else Left(AccountHasInsufficientFunds)
+
+  private def haveSameCurrency(
+    fromAccount: CurrencyAccount,
+    toAccount: CurrencyAccount
+  ): Either[AccountError, Unit] =
+    if fromAccount.currency == toAccount.currency then Right(())
+    else Left(CannotTransferToAccountWithDifferentCurrency)
+
+  private def areDifferentAccounts(
+    fromAccountNumber: AccountNumber,
+    toAccountNumber: AccountNumber
+  ): Either[AccountError, Unit] =
+    if fromAccountNumber != toAccountNumber then Right(())
+    else Left(CannotTransferToSameAccount)
 
 object AccountService:
-  val layer: ULayer[AccountService] =
-    ZLayer:
-      (TMap.empty[AccountNumber, CurrencyAccount] <*> TMap.empty[IdempotencyKey, CompletedTransfer]).commit
-        .map(DefaultDataStore(_, _))
+  val layer: URLayer[AccountStore, AccountService] =
+    ZLayer.fromFunction(AccountService(_))
 
-  def getAllAccounts: URIO[AccountService, Seq[CurrencyAccount]] =
-    ZIO.serviceWithZIO[AccountService](_.getAllAccounts)
+  val maxPageSize: Int = 1000
 
   def getAccount(accountNumber: AccountNumber): ZIO[AccountService, AccountError, CurrencyAccount] =
     ZIO.serviceWithZIO[AccountService](_.getAccount(accountNumber))
 
-  def postAccount(account: CurrencyAccount): ZIO[AccountService, AccountError, Unit] =
-    ZIO.serviceWithZIO[AccountService](_.postAccount(account))
+  def listAccounts(
+    after: Option[AccountNumber],
+    limit: Int
+  ): ZIO[AccountService, AccountError, AccountPage] =
+    ZIO.serviceWithZIO[AccountService](_.listAccounts(after, limit))
 
-  def transfer(key: IdempotencyKey, instruction: TransferInstruction)(
-    update: (CurrencyAccount, CurrencyAccount) => Either[AccountError, (CurrencyAccount, CurrencyAccount)]
+  def addNewAccount(account: CurrencyAccount): ZIO[AccountService, AccountError, Unit] =
+    ZIO.serviceWithZIO[AccountService](_.addNewAccount(account))
+
+  def accountTransfer(
+    key: IdempotencyKey,
+    fromAccountNumber: AccountNumber,
+    toAccountNumber: AccountNumber,
+    transferAmount: BigDecimal
   ): ZIO[AccountService, AccountError, TransferOutcome] =
-    ZIO.serviceWithZIO[AccountService](_.transfer(key, instruction)(update))
-
-private final case class CompletedTransfer(instruction: TransferInstruction, transfer: AccountTransfer)
-
-// Completed transfers are kept for the life of the process, as the accounts are
-private case class DefaultDataStore(
-  accounts: TMap[AccountNumber, CurrencyAccount],
-  completedTransfers: TMap[IdempotencyKey, CompletedTransfer]
-) extends AccountService:
-
-  override def getAllAccounts: UIO[Seq[CurrencyAccount]] =
-    accounts.values.commit
-
-  override def getAccount(
-    accountNumber: AccountNumber
-  ): IO[AccountError, CurrencyAccount] =
-    accounts
-      .get(accountNumber)
-      .commit
-      .flatMap:
-        case Some(account) => ZIO.succeed(account)
-        case None          => ZIO.fail(AccountDoesNotExist)
-
-  override def postAccount(account: CurrencyAccount): IO[AccountError, Unit] =
-    STM.atomically:
-      accounts
-        .contains(account.accountNumber)
-        .flatMap:
-          case true  => STM.fail(AccountAlreadyExists)
-          case false => accounts.put(account.accountNumber, account)
-
-  override def transfer(key: IdempotencyKey, instruction: TransferInstruction)(
-    update: (CurrencyAccount, CurrencyAccount) => Either[AccountError, (CurrencyAccount, CurrencyAccount)]
-  ): IO[AccountError, TransferOutcome] =
-    STM.atomically:
-      completedTransfers
-        .get(key)
-        .flatMap:
-          case Some(completed) if completed.instruction == instruction =>
-            STM.succeed(TransferOutcome.Replayed(completed.transfer))
-          case Some(_) =>
-            STM.fail(IdempotencyKeyReusedForDifferentTransfer)
-          case None =>
-            for
-              fromAccountOpt          <- accounts.get(instruction.fromAccountNumber)
-              toAccountOpt            <- accounts.get(instruction.toAccountNumber)
-              fromAccount             <- STM.fromOption(fromAccountOpt).orElseFail(AccountDoesNotExist)
-              toAccount               <- STM.fromOption(toAccountOpt).orElseFail(AccountDoesNotExist)
-              result                  <- STM.fromEither(update(fromAccount, toAccount))
-              (updatedFrom, updatedTo) = result
-              _                       <- accounts.put(instruction.fromAccountNumber, updatedFrom)
-              _                       <- accounts.put(instruction.toAccountNumber, updatedTo)
-              transfer                 = AccountTransfer(fromAccount, toAccount, updatedFrom, updatedTo)
-              _                       <- completedTransfers.put(key, CompletedTransfer(instruction, transfer))
-            yield TransferOutcome.Applied(transfer)
+    ZIO.serviceWithZIO[AccountService](
+      _.accountTransfer(key, fromAccountNumber, toAccountNumber, transferAmount)
+    )

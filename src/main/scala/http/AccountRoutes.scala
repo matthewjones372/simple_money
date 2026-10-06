@@ -90,13 +90,13 @@ object AccountRoutes:
     )
 
   private val getAccounts = getAccountsEndpoint.implement: (limit, after) =>
-    AccountTransferService
+    AccountService
       .listAccounts(after.map(AccountNumber(_)), limit.getOrElse(defaultPageSize))
       .map(toAccountPageResponse)
       .mapError(ApiError.from)
 
   private val getAccount = getAccountEndpoint.implement: accountNumber =>
-    AccountTransferService
+    AccountService
       .getAccount(AccountNumber(accountNumber))
       .map(toAccountResponse)
       .mapError(ApiError.from)
@@ -106,7 +106,7 @@ object AccountRoutes:
       currency <- ZIO
                     .attempt(Currency.getInstance(request.currencyCode))
                     .orElseFail(AccountError.UnknownCurrency)
-      _ <- AccountTransferService.addNewAccount(
+      _ <- AccountService.addNewAccount(
              CurrencyAccount(AccountNumber(request.accountNumber), Money(plain(request.balance), currency))
            )
     yield SuccessResponse(s"Successfully added ${request.accountNumber} into the datastore"))
@@ -114,7 +114,7 @@ object AccountRoutes:
 
   private val transfer = transferEndpoint.implement: (idempotencyKey, request) =>
     (ZIO.fail(AccountError.IdempotencyKeyIsBlank).when(idempotencyKey.isBlank) *>
-      AccountTransferService.accountTransfer(
+      AccountService.accountTransfer(
         IdempotencyKey(idempotencyKey),
         AccountNumber(request.fromAccountNumber),
         AccountNumber(request.toAccountNumber),
@@ -127,5 +127,5 @@ object AccountRoutes:
       )
       .mapError(ApiError.from)
 
-  val routes: Routes[AccountTransferService, Response] =
+  val routes: Routes[AccountService, Response] =
     Routes(getAccounts, getAccount, postAccount, transfer)
