@@ -1,15 +1,14 @@
-*.class
 .idea
-target/
-
 *.class
 *.log
-# sbt specific
+
+# sbt
+target/
+.bsp/
 .cache/
 .history/
 .lib/
 dist/*
-target/
 lib_managed/
 src_managed/
 project/boot/
@@ -17,4 +16,3 @@ project/plugins/project/
 
 .scala_dependencies
 .worksheet
-.idea

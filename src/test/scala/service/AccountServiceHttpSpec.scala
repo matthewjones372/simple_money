@@ -66,6 +66,32 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
         updatedAccount2.balance == CurrencyAmount(205)
       )
     }.provide(testLayer),
+    test("logs a transfer without whole account numbers or balances") {
+      for {
+        _ <- setupAccounts
+        _ <- AccountTransferService.accountTransfer(
+               IdempotencyKey("logged"),
+               accountWithPositiveFunds,
+               accountWithGBP,
+               CurrencyAmount(5)
+             )
+        _ <- AccountTransferService.accountTransfer(
+               IdempotencyKey("logged"),
+               accountWithPositiveFunds,
+               accountWithGBP,
+               CurrencyAmount(5)
+             )
+        output  <- ZTestLogger.logOutput
+        messages = output.map(_.message())
+      } yield assertTrue(
+        messages.contains("Transfer logged moved 5 GBP from ****TIVE to ****_GBP"),
+        messages.contains("Transfer logged was already applied, so it was not applied again"),
+        !messages.exists(message =>
+          message.contains(accountWithPositiveFunds.value) || message.contains(accountWithGBP.value) ||
+            message.contains("95") || message.contains("205")
+        )
+      )
+    }.provide(testLayer),
     test("should allow multiple payments") {
       for {
         _               <- setupAccounts

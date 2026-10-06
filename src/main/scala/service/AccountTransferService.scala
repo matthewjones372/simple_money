@@ -39,8 +39,10 @@ final class AccountTransferService(accounts: AccountService):
                    )
       _ <- outcome match
              case TransferOutcome.Applied(transfer) =>
-               ZIO.logInfo(updatedLogMessage(transfer.fromBefore, transfer.fromAfter)) *>
-                 ZIO.logInfo(updatedLogMessage(transfer.toBefore, transfer.toAfter))
+               ZIO.logInfo(
+                 s"Transfer ${key.value} moved ${transferAmount.value} ${transfer.fromBefore.currency.getCurrencyCode} " +
+                   s"from ${fromAccountNumber.masked} to ${toAccountNumber.masked}"
+               )
              case TransferOutcome.Replayed(_) =>
                ZIO.logInfo(s"Transfer ${key.value} was already applied, so it was not applied again")
     yield outcome
@@ -50,10 +52,6 @@ final class AccountTransferService(accounts: AccountService):
 
   private def addBalance(toAccount: CurrencyAccount, transferAmount: CurrencyAmount): CurrencyAccount =
     toAccount.copy(balance = toAccount.balance + transferAmount)
-
-  private def updatedLogMessage(before: CurrencyAccount, after: CurrencyAccount) =
-    s"""Updated Account: ${before.accountNumber.value}: Balance updated from ${before.balance.value} """ +
-      s"""${before.currency.getCurrencyCode} to ${after.balance.value} ${after.currency.getCurrencyCode}"""
 
   private def nonNegativeTransferAmount(transferAmount: CurrencyAmount): Either[TransferServiceErrors, Unit] =
     if transferAmount.value > 0 then Right(())
