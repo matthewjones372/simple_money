@@ -49,14 +49,7 @@ curl -X POST localhost:8081/api/accounts -H 'Content-Type: application/json' -d 
 ```
 
 `currencyCode` is an ISO 4217 code. The balance cannot be negative or have more decimal places than the currency
-allows, so `50.001` GBP is refused. Failures return `400 Bad Request` with an error body:
-
-```json
-{"error": "AmountHasTooManyDecimalPlaces"}
-```
-
-The errors are `UnknownCurrency`, `AccountAlreadyExists`, `CannotOpenAccountWithNegativeBalance` and
-`AmountHasTooManyDecimalPlaces`.
+allows, so `50.001` GBP is refused. See [Errors](#errors) for what a failure returns.
 
 ### List accounts
 
@@ -93,16 +86,29 @@ request is retried with the same key and the same body, the transfer is not made
 returned, so a caller can safely retry after a timeout. Reusing a key with a different body is refused. A transfer that
 fails is not recorded, so retrying it with the same key tries again.
 
-A transfer that cannot be made returns `400 Bad Request` with one of these errors:
+## Errors
 
-- `AccountDoesNotExist`
-- `AmountHasTooManyDecimalPlaces`, for an amount smaller than the currency's minor unit
-- `AccountHasInsufficientFunds`
-- `CannotTransferToSameAccount`
-- `CannotTransferToAccountWithDifferentCurrency`
-- `CannotTransferNegativeAmount`
-- `IdempotencyKeyIsBlank`
-- `IdempotencyKeyReusedForDifferentTransfer`
+Every failure has a JSON body with a stable `error` code to match on and a `message` for people:
+
+```json
+{"error": "AccountHasInsufficientFunds", "message": "The account does not have enough money for this transfer"}
+```
+
+| Status | `error` | When |
+|---|---|---|
+| 400 | `MalformedBody`, `UnsupportedContentType` | The body is not JSON of the right shape |
+| 400 | `MissingHeader`, `MalformedHeader` | A required header, such as `Idempotency-Key`, is missing or unreadable |
+| 400 | `UnknownCurrency` | The currency code is not ISO 4217 |
+| 400 | `CannotOpenAccountWithNegativeBalance` | A new account has a negative balance |
+| 400 | `AmountHasTooManyDecimalPlaces` | An amount is finer than its currency's minor unit |
+| 400 | `CannotTransferNegativeAmount` | A transfer amount is zero or less |
+| 400 | `CannotTransferToSameAccount` | A transfer names the same account twice |
+| 400 | `IdempotencyKeyIsBlank` | The `Idempotency-Key` header is blank |
+| 404 | `AccountDoesNotExist` | An account in a transfer does not exist |
+| 409 | `AccountAlreadyExists` | A new account's number is already taken |
+| 409 | `IdempotencyKeyReusedForDifferentTransfer` | An `Idempotency-Key` was already used for a different transfer |
+| 422 | `AccountHasInsufficientFunds` | The source account cannot cover the transfer |
+| 422 | `CannotTransferToAccountWithDifferentCurrency` | The two accounts have different currencies |
 
 ## Design
 
@@ -116,8 +122,7 @@ A transfer that cannot be made returns `400 Bad Request` with one of these error
 - Errors as values: Failures are a sealed `TransferServiceErrors` type in the ZIO error channel rather than
   exceptions.
 - OpenAPI: The routes are implemented from ZIO HTTP endpoints, so the Swagger page describes what the server does.
-  Requests must be JSON. A body that does not decode gets ZIO HTTP's own codec error, as JSON when the client sends
-  `Accept: application/json`.
+  Requests must be JSON. A request that does not decode gets the same error body as any other failure.
 
 The account model is deliberately small:
 

@@ -47,14 +47,20 @@ object AccountRoutesSpec extends ZIOSpecDefault {
     .flatMap(decode[Seq[AccountResponse]])
     .map(_.map(account => account.accountNumber -> account.balance).toMap)
 
-  def assertError(response: Response, expected: String) =
+  def assertError(response: Response, status: Status, code: String) =
     for {
       error <- decode[ErrorResponse](response)
     } yield assertTrue(
-      response.status == Status.BadRequest,
+      response.status == status,
       response.header(Header.ContentType).exists(_.mediaType == MediaType.application.json),
-      error == ErrorResponse(expected)
+      error.error == code,
+      error.message.nonEmpty
     )
+
+  def badRequest(code: String)(response: Response)    = assertError(response, Status.BadRequest, code)
+  def notFound(code: String)(response: Response)      = assertError(response, Status.NotFound, code)
+  def conflict(code: String)(response: Response)      = assertError(response, Status.Conflict, code)
+  def unprocessable(code: String)(response: Response) = assertError(response, Status.UnprocessableEntity, code)
 
   def spec = suite("AccountRoutesSpec")(
     test("creates an account and lists it") {
@@ -74,35 +80,42 @@ object AccountRoutesSpec extends ZIOSpecDefault {
       } yield assertTrue(created.status == Status.Ok)
     },
     test("rejects a negative opening balance") {
-      postAccount("A", "-5.00", "GBP").flatMap(assertError(_, "CannotOpenAccountWithNegativeBalance"))
+      postAccount("A", "-5.00", "GBP").flatMap(badRequest("CannotOpenAccountWithNegativeBalance"))
     },
     test("rejects an opening balance with more decimal places than the currency allows") {
       for {
-        gbp <- postAccount("A", "5.123", "GBP").flatMap(assertError(_, "AmountHasTooManyDecimalPlaces"))
-        jpy <- postAccount("B", "100.5", "JPY").flatMap(assertError(_, "AmountHasTooManyDecimalPlaces"))
+        gbp <- postAccount("A", "5.123", "GBP").flatMap(badRequest("AmountHasTooManyDecimalPlaces"))
+        jpy <- postAccount("B", "100.5", "JPY").flatMap(badRequest("AmountHasTooManyDecimalPlaces"))
       } yield gbp && jpy
     },
     test("rejects an unknown currency") {
-      postAccount("A", "10", "ZZZ").flatMap(assertError(_, "UnknownCurrency"))
+      postAccount("A", "10", "ZZZ").flatMap(badRequest("UnknownCurrency"))
     },
     test("rejects a duplicate account") {
       for {
         _      <- postAccount("A", "10", "GBP")
-        result <- postAccount("A", "10", "GBP").flatMap(assertError(_, "AccountAlreadyExists"))
+        result <- postAccount("A", "10", "GBP").flatMap(conflict("AccountAlreadyExists"))
       } yield result
     },
-    test("rejects a body that is not valid JSON for the endpoint, as JSON when the client accepts it") {
+    test("rejects a body that is not valid JSON for the endpoint with an error body") {
       for {
         response <- run(
                       Request
                         .post("/api/accounts/transfer", Body.fromString("""{"amount": "x"}"""))
                         .addHeader("Idempotency-Key", "bad-body")
-                        .addHeader(Header.Accept(MediaType.application.json))
                     )
-      } yield assertTrue(
-        response.status == Status.BadRequest,
-        response.header(Header.ContentType).exists(_.mediaType == MediaType.application.json)
-      )
+        result <- assertError(response, Status.BadRequest, "MalformedBody")
+      } yield result
+    },
+    test("rejects a form body, as curl -d sends, with an error body") {
+      for {
+        response <- run(
+                      Request
+                        .post("/api/accounts", Body.fromString("""{"accountNumber": "A"}"""))
+                        .addHeader(Header.ContentType(MediaType.application.`x-www-form-urlencoded`))
+                    )
+        result <- assertError(response, Status.BadRequest, "MalformedBody")
+      } yield result
     },
     test("transfers between accounts") {
       for {
@@ -121,26 +134,25 @@ object AccountRoutesSpec extends ZIOSpecDefault {
       for {
         _      <- postAccount("A", "10", "GBP")
         _      <- postAccount("B", "0", "GBP")
-        result <- transfer("A", "B", "0.0001").flatMap(assertError(_, "AmountHasTooManyDecimalPlaces"))
+        result <- transfer("A", "B", "0.0001").flatMap(badRequest("AmountHasTooManyDecimalPlaces"))
         after  <- balances
       } yield result && assertTrue(after == Map("A" -> BigDecimal(10), "B" -> BigDecimal(0)))
     },
-    test("returns transfer errors as JSON") {
+    test("returns transfer errors as JSON with a status for each") {
       for {
         _              <- postAccount("A", "10", "GBP")
         _              <- postAccount("B", "10", "EUR")
-        missing        <- transfer("X", "A", "1").flatMap(assertError(_, "AccountDoesNotExist"))
-        sameAccount    <- transfer("A", "A", "1").flatMap(assertError(_, "CannotTransferToSameAccount"))
-        otherCurrency  <- transfer("A", "B", "1")
-                            .flatMap(assertError(_, "CannotTransferToAccountWithDifferentCurrency"))
-        negativeAmount <- transfer("A", "B", "-1").flatMap(assertError(_, "CannotTransferNegativeAmount"))
+        missing        <- transfer("X", "A", "1").flatMap(notFound("AccountDoesNotExist"))
+        sameAccount    <- transfer("A", "A", "1").flatMap(badRequest("CannotTransferToSameAccount"))
+        otherCurrency  <- transfer("A", "B", "1").flatMap(unprocessable("CannotTransferToAccountWithDifferentCurrency"))
+        negativeAmount <- transfer("A", "B", "-1").flatMap(badRequest("CannotTransferNegativeAmount"))
       } yield missing && sameAccount && otherCurrency && negativeAmount
     },
     test("rejects a transfer the source account cannot cover") {
       for {
         _      <- postAccount("A", "10", "GBP")
         _      <- postAccount("B", "0", "GBP")
-        result <- transfer("A", "B", "10.01").flatMap(assertError(_, "AccountHasInsufficientFunds"))
+        result <- transfer("A", "B", "10.01").flatMap(unprocessable("AccountHasInsufficientFunds"))
       } yield result
     },
     test("applies a retried transfer once and answers the retry as the original") {
@@ -164,8 +176,7 @@ object AccountRoutesSpec extends ZIOSpecDefault {
         _      <- postAccount("A", "100", "GBP")
         _      <- postAccount("B", "0", "GBP")
         _      <- transferWithKey("key-1", "A", "B", "10")
-        result <- transferWithKey("key-1", "A", "B", "20")
-                    .flatMap(assertError(_, "IdempotencyKeyReusedForDifferentTransfer"))
+        result <- transferWithKey("key-1", "A", "B", "20").flatMap(conflict("IdempotencyKeyReusedForDifferentTransfer"))
         after  <- balances
       } yield result && assertTrue(after == Map("A" -> BigDecimal(90), "B" -> BigDecimal(10)))
     },
@@ -173,17 +184,21 @@ object AccountRoutesSpec extends ZIOSpecDefault {
       for {
         _       <- postAccount("A", "100", "GBP")
         _       <- postAccount("B", "0", "GBP")
-        missing <- run(transferRequest("A", "B", "10"))
-        blank   <- transferWithKey(" ", "A", "B", "10").flatMap(assertError(_, "IdempotencyKeyIsBlank"))
+        missing <- run(transferRequest("A", "B", "10")).flatMap(badRequest("MissingHeader"))
+        blank   <- transferWithKey(" ", "A", "B", "10").flatMap(badRequest("IdempotencyKeyIsBlank"))
         after   <- balances
-      } yield blank && assertTrue(
-        missing.status == Status.BadRequest,
-        after == Map("A" -> BigDecimal(100), "B" -> BigDecimal(0))
-      )
+      } yield missing && blank && assertTrue(after == Map("A" -> BigDecimal(100), "B" -> BigDecimal(0)))
     },
     test("describes the error body in the OpenAPI spec") {
       val spec = AccountRoutes.openAPISpec.toJson
-      assertTrue(spec.contains("ErrorResponse"), spec.contains("TransferRequest"), spec.contains("Idempotency-Key"))
+      assertTrue(
+        spec.contains("ErrorResponse"),
+        spec.contains("TransferRequest"),
+        spec.contains("Idempotency-Key"),
+        spec.contains("\"404\""),
+        spec.contains("\"409\""),
+        spec.contains("\"422\"")
+      )
     }
   ).provide(testLayer, Runtime.removeDefaultLoggers >>> ZTestLogger.default)
 }

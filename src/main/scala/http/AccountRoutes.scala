@@ -14,7 +14,7 @@ import java.util.Currency
 case class AccountResponse(accountNumber: String, balance: BigDecimal, currencyCode: String)
 case class PostNewAccountRequest(accountNumber: String, balance: BigDecimal, currencyCode: String)
 case class TransferRequest(fromAccountNumber: String, toAccountNumber: String, amount: BigDecimal)
-case class ErrorResponse(error: String)
+case class ErrorResponse(error: String, message: String)
 case class SuccessResponse(message: String)
 
 object Schemas:
@@ -44,14 +44,16 @@ object AccountRoutes:
     Endpoint(RoutePattern.POST / "api" / "accounts")
       .in[PostNewAccountRequest]
       .out[SuccessResponse]
-      .outError[ErrorResponse](Status.BadRequest)
+      .outErrors[ApiError](ApiError.badRequest, ApiError.conflict)
+      .copy(codecError = ApiError.requestCodecError)
 
   private val transferEndpoint =
     Endpoint(RoutePattern.POST / "api" / "accounts" / "transfer")
       .header(HeaderCodec.name[String]("Idempotency-Key"))
       .in[TransferRequest]
       .out[SuccessResponse]
-      .outError[ErrorResponse](Status.BadRequest)
+      .outErrors[ApiError](ApiError.badRequest, ApiError.notFound, ApiError.conflict, ApiError.unprocessableEntity)
+      .copy(codecError = ApiError.requestCodecError)
 
   val openAPISpec: OpenAPI =
     OpenAPIGen.fromEndpoints(
@@ -61,8 +63,6 @@ object AccountRoutes:
       postAccountEndpoint,
       transferEndpoint
     )
-
-  private def toErrorResponse(err: TransferServiceErrors): ErrorResponse = ErrorResponse(err.toString)
 
   private val getAccounts = getAccountsEndpoint.implement: _ =>
     AccountTransferService.listAllAccounts.map(_.map(toAccountResponse))
@@ -76,7 +76,7 @@ object AccountRoutes:
              CurrencyAccount(AccountNumber(request.accountNumber), CurrencyAmount(request.balance), currency)
            )
     yield SuccessResponse(s"Successfully added ${request.accountNumber} into the datastore"))
-      .mapError(toErrorResponse)
+      .mapError(ApiError.from)
 
   private val transfer = transferEndpoint.implement: (idempotencyKey, request) =>
     (ZIO.fail(TransferServiceErrors.IdempotencyKeyIsBlank).when(idempotencyKey.isBlank) *>
@@ -91,7 +91,7 @@ object AccountRoutes:
           s"${request.amount} has been transferred from ${request.fromAccountNumber} to ${request.toAccountNumber}"
         )
       )
-      .mapError(toErrorResponse)
+      .mapError(ApiError.from)
 
   val routes: Routes[AccountTransferService, Response] =
     Routes(getAccounts, postAccount, transfer)
