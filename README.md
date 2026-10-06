@@ -14,7 +14,7 @@ It started in 2018 as an Akka and cats project and was later rewritten on ZIO.
 
 ## Running
 
-Requires [sbt](https://www.scala-sbt.org/) and a JDK.
+Requires [sbt](https://www.scala-sbt.org/) and JDK 25 or later.
 
 ```
 sbt run

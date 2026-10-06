@@ -49,7 +49,7 @@ object AccountRoutes:
 
   private val transferEndpoint =
     Endpoint(RoutePattern.POST / "api" / "accounts" / "transfer")
-      .header(HeaderCodec.name[String]("Idempotency-Key"))
+      .header(HeaderCodec.headerAs[String]("Idempotency-Key"))
       .in[TransferRequest]
       .out[SuccessResponse]
       .outErrors[ApiError](ApiError.badRequest, ApiError.notFound, ApiError.conflict, ApiError.unprocessableEntity)

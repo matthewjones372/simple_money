@@ -91,12 +91,20 @@ object ApiError:
   private def fromCodecError(error: HttpCodecError): ErrorResponse =
     error match
       case HttpCodecError.MissingHeader(name) =>
-        ErrorResponse("MissingHeader", s"The $name header is required")
+        ErrorResponse("MissingHeader", s"The ${headerName(name)} header is required")
+      case HttpCodecError.MissingHeaders(names) =>
+        ErrorResponse("MissingHeader", s"The ${names.map(headerName).mkString(", ")} header is required")
       case HttpCodecError.MalformedHeader(name, _) =>
-        ErrorResponse("MalformedHeader", s"The $name header could not be read")
+        ErrorResponse("MalformedHeader", s"The ${headerName(name)} header could not be read")
+      case HttpCodecError.DecodingErrorHeader(name, _) =>
+        ErrorResponse("MalformedHeader", s"The ${headerName(name)} header could not be read")
       case _: HttpCodecError.UnsupportedContentType =>
         ErrorResponse("UnsupportedContentType", "The request body must be JSON")
       case _: HttpCodecError.MalformedBody =>
         ErrorResponse("MalformedBody", "The request body is not valid JSON for this endpoint")
       case _ =>
         ErrorResponse("InvalidRequest", "The request could not be read")
+
+  // ZIO HTTP reports a header declared as Idempotency-Key as idempotency-Key
+  private def headerName(name: String): String =
+    name.split('-').map(_.capitalize).mkString("-")
