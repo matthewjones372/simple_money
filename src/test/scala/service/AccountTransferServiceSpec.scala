@@ -4,11 +4,9 @@ import domain.{AccountNumber, CurrencyAccount, IdempotencyKey, Money, TransferOu
 import java.util.Currency
 import zio._
 import zio.test._
-import zio.test.Assertion._
-import service.AccountService
-import service.AccountError._
+import AccountError._
 
-object AccountServiceHttpSpec extends ZIOSpecDefault {
+object AccountTransferServiceSpec extends ZIOSpecDefault {
 
   val testLayer: ULayer[AccountService & AccountTransferService] =
     AccountService.layer >+> AccountTransferService.layer
@@ -45,7 +43,7 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
     _ <- AccountService.postAccount(negativeAccount)
   } yield ()
 
-  def spec = suite("AccountServiceHttpSpec")(
+  def spec = suite("AccountTransferServiceSpec")(
     test("listAccounts should return every account when they fit on one page") {
       for {
         _    <- setupAccounts

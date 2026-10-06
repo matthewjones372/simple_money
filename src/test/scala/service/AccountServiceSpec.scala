@@ -1,4 +1,4 @@
-package infrastructure
+package service
 
 import domain.{
   AccountNumber,
@@ -12,9 +12,7 @@ import domain.{
 import java.util.Currency
 import zio._
 import zio.test._
-import zio.test.Assertion._
-import service.AccountService
-import service.AccountError._
+import AccountError._
 
 object AccountServiceSpec extends ZIOSpecDefault {
 
