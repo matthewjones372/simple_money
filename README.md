@@ -20,7 +20,8 @@ Requires [sbt](https://www.scala-sbt.org/) and JDK 25 or later.
 sbt run
 ```
 
-The server listens on http://localhost:8081, with Swagger UI at http://localhost:8081/docs.
+The server listens on port 8081, with Swagger UI at http://localhost:8081/docs. Set the `PORT` environment variable
+to use another port, or `PORT=0` to let the system pick a free one; the log says which port it is listening on.
 
 ```
 sbt test
@@ -117,8 +118,9 @@ Every failure has a JSON body with a stable `error` code to match on and a `mess
 - Atomic transfers: Accounts live in a `TMap`. A transfer reads both accounts, checks the rules and writes both
   balances in one STM transaction, so concurrent transfers cannot lose or create money. The same transaction records
   the transfer against its idempotency key, so concurrent retries of one transfer apply it once. Recorded keys are
-  kept in memory for the life of the process, like the accounts. One of the tests runs many
-  transfers at once and checks the total is unchanged.
+  kept in memory for the life of the process, like the accounts. The tests race many transfers at once, including
+  ones that together ask for more than the balance and ones running in both directions, and check that no account
+  is overdrawn and the total is unchanged.
 - Errors as values: Failures are a sealed `TransferServiceErrors` type in the ZIO error channel rather than
   exceptions.
 - OpenAPI: The routes are implemented from ZIO HTTP endpoints, so the Swagger page describes what the server does.

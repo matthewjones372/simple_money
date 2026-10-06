@@ -175,7 +175,51 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
         fromBalance == CurrencyAmount(499),
         toBalance == CurrencyAmount(1)
       )
-    }.provide(testLayer)
+    }.provide(testLayer),
+    test("should never overdraw when concurrent transfers ask for more than the balance") {
+      val fromAccount = AccountNumber("OVERDRAWN_FROM")
+      val toAccount   = AccountNumber("OVERDRAWN_TO")
+
+      for {
+        _       <- AccountService.postAccount(CurrencyAccount(fromAccount, CurrencyAmount(100), gbp))
+        _       <- AccountService.postAccount(CurrencyAccount(toAccount, CurrencyAmount(0), gbp))
+        results <- ZIO.foreachPar(1 to 250) { _ =>
+                     accountTransfer(fromAccount, toAccount, CurrencyAmount(1)).either
+                   }
+        fromBalance <- AccountService.getAccount(fromAccount).map(_.balance)
+        toBalance   <- AccountService.getAccount(toAccount).map(_.balance)
+      } yield assertTrue(
+        results.count(_.isRight) == 100,
+        results.collect { case Left(error) => error }.forall(_ == AccountHasInsufficientFunds),
+        fromBalance == CurrencyAmount(0),
+        toBalance == CurrencyAmount(100)
+      )
+    }.provide(testLayer),
+    test("should keep the total when concurrent transfers run in both directions") {
+      val first     = AccountNumber("BOTH_WAYS_1")
+      val second    = AccountNumber("BOTH_WAYS_2")
+      val transfers =
+        List.fill(200)((first, second, CurrencyAmount(3))) ++ List.fill(200)((second, first, CurrencyAmount(2)))
+
+      for {
+        _        <- AccountService.postAccount(CurrencyAccount(first, CurrencyAmount(100), gbp))
+        _        <- AccountService.postAccount(CurrencyAccount(second, CurrencyAmount(100), gbp))
+        shuffled <- Random.shuffle(transfers)
+        results  <- ZIO.foreachPar(shuffled) { case (from, to, amount) =>
+                     accountTransfer(from, to, amount).either.map(result => (from, result))
+                   }
+        firstBalance     <- AccountService.getAccount(first).map(_.balance.value)
+        secondBalance    <- AccountService.getAccount(second).map(_.balance.value)
+        appliedFromFirst  = results.count { case (from, result) => from == first && result.isRight }
+        appliedFromSecond = results.count { case (from, result) => from == second && result.isRight }
+      } yield assertTrue(
+        firstBalance + secondBalance == BigDecimal(200),
+        firstBalance >= 0,
+        secondBalance >= 0,
+        firstBalance == BigDecimal(100) - 3 * appliedFromFirst + 2 * appliedFromSecond,
+        results.collect { case (_, Left(error)) => error }.forall(_ == AccountHasInsufficientFunds)
+      )
+    }.provide(testLayer) @@ TestAspect.nonFlaky(20)
   ).provideLayer(
     Runtime.removeDefaultLoggers >>> ZTestLogger.default
   )
