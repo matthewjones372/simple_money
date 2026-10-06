@@ -5,6 +5,8 @@ import zio._
 import service.AccountService
 import service.TransferServiceErrors._
 
+import java.util.Currency
+
 
 
 case class AccountTransferService():
@@ -13,7 +15,11 @@ case class AccountTransferService():
     AccountService.getAllAccounts
 
   def addNewAccount(account: CurrencyAccount): ZIO[AccountService, TransferServiceErrors, Unit] =
-    AccountService.postAccount(account)
+    for
+      _ <- ZIO.fromEither(nonNegativeOpeningBalance(account.balance))
+      _ <- ZIO.fromEither(fitsCurrency(account.balance, account.currency))
+      _ <- AccountService.postAccount(account)
+    yield ()
 
   def accountTransfer(
                        fromAccountNumber: AccountNumber,
@@ -26,6 +32,7 @@ case class AccountTransferService():
       transferResult <- AccountService.transfer(fromAccountNumber, toAccountNumber): (fromAccount, toAccount) =>
         for
           _ <- haveSameCurrency(fromAccount, toAccount)
+          _ <- fitsCurrency(transferAmount, fromAccount.currency)
           _ <- hasSufficientBalance(fromAccount, transferAmount)
         yield (
           subtractBalance(fromAccount, transferAmount),
@@ -50,6 +57,20 @@ case class AccountTransferService():
       Right(())
     else
       Left(CannotTransferNegativeAmount)
+
+  private def nonNegativeOpeningBalance(balance: CurrencyAmount): Either[TransferServiceErrors, Unit] =
+    if balance.value >= 0 then
+      Right(())
+    else
+      Left(CannotOpenAccountWithNegativeBalance)
+
+  // Currencies without minor units, such as XAU, report -1 and are not limited
+  private def fitsCurrency(amount: CurrencyAmount, currency: Currency): Either[TransferServiceErrors, Unit] =
+    val fractionDigits = currency.getDefaultFractionDigits
+    if fractionDigits < 0 || amount.value.bigDecimal.stripTrailingZeros.scale <= fractionDigits then
+      Right(())
+    else
+      Left(AmountHasTooManyDecimalPlaces)
 
   private def hasSufficientBalance(
                                     account: CurrencyAccount,
