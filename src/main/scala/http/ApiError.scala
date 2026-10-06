@@ -36,8 +36,18 @@ object ApiError:
   val unprocessableEntity: HttpCodec[HttpCodecType.Status & HttpCodecType.Content, UnprocessableEntity] =
     HttpCodec.error[UnprocessableEntity](Status.UnprocessableEntity)
 
+  /** Any account error, with the status of its kind */
   def from(error: AccountError): ApiError =
     error match
+      case error: Invalid     => invalid(error)
+      case error: Missing     => missing(error)
+      case error: Conflicting => conflicting(error)
+      case error: Refused     => refused(error)
+
+  def invalid(error: Invalid): BadRequest =
+    error match
+      case UnknownCurrency =>
+        BadRequest(ErrorResponse("UnknownCurrency", "The currency code is not an ISO 4217 code"))
       case InvalidAccountNumber =>
         BadRequest(
           ErrorResponse(
@@ -45,8 +55,6 @@ object ApiError:
             "The account number must be 1 to 64 characters, with no spaces at either end and no control characters"
           )
         )
-      case UnknownCurrency =>
-        BadRequest(ErrorResponse("UnknownCurrency", "The currency code is not an ISO 4217 code"))
       case CannotOpenAccountWithNegativeBalance =>
         BadRequest(
           ErrorResponse("CannotOpenAccountWithNegativeBalance", "An account cannot open with a negative balance")
@@ -67,8 +75,14 @@ object ApiError:
         BadRequest(ErrorResponse("InvalidCursor", "The after cursor is not the id of an account"))
       case InvalidPageSize =>
         BadRequest(ErrorResponse("InvalidPageSize", "The limit must be between 1 and 1000"))
+
+  def missing(error: Missing): NotFound =
+    error match
       case AccountDoesNotExist =>
         NotFound(ErrorResponse("AccountDoesNotExist", "An account in the request does not exist"))
+
+  def conflicting(error: Conflicting): Conflict =
+    error match
       case AccountAlreadyExists =>
         Conflict(ErrorResponse("AccountAlreadyExists", "An account with this number already exists"))
       case IdempotencyKeyReusedForDifferentTransfer =>
@@ -78,6 +92,9 @@ object ApiError:
             "This Idempotency-Key was already used for a different transfer"
           )
         )
+
+  def refused(error: Refused): UnprocessableEntity =
+    error match
       case AccountHasInsufficientFunds =>
         UnprocessableEntity(
           ErrorResponse("AccountHasInsufficientFunds", "The account does not have enough money for this transfer")

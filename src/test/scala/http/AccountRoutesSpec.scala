@@ -4,6 +4,8 @@ import service.{AccountStore, AccountService}
 import zio.*
 import zio.http.*
 import zio.schema.Schema
+import zio.json.*
+import zio.json.ast.{Json, JsonCursor}
 import zio.schema.codec.JsonCodec
 import zio.test.*
 
@@ -52,6 +54,14 @@ object AccountRoutesSpec extends ZIOSpecDefault:
   def balances = get("/api/accounts")
     .flatMap(decode[AccountPageResponse])
     .map(_.accounts.map(account => account.accountNumber -> account.balance).toMap)
+
+  def openAPIPaths: Chunk[(String, Json)] =
+    AccountRoutes.openAPISpec.toJson
+      .fromJson[Json]
+      .toOption
+      .flatMap(_.get(JsonCursor.field("paths").isObject).toOption)
+      .map(_.fields)
+      .getOrElse(Chunk.empty)
 
   def assertError(response: Response, status: Status, code: String) =
     for error <- decode[ErrorResponse](response)
@@ -297,10 +307,24 @@ object AccountRoutesSpec extends ZIOSpecDefault:
       assertTrue(
         spec.contains("ErrorResponse"),
         spec.contains("TransferRequest"),
-        spec.toLowerCase.contains("idempotency-key"),
-        spec.contains("\"404\""),
-        spec.contains("\"409\""),
-        spec.contains("\"422\"")
+        spec.toLowerCase.contains("idempotency-key")
+      )
+    },
+    test("declares exactly the statuses each endpoint can return") {
+      val statuses =
+        for
+          case (path, Json.Obj(methods)) <- openAPIPaths
+          case (method, operation) <- methods
+          responses <- operation.get(JsonCursor.field("responses").isObject).toSeq
+        yield s"${method.toUpperCase} $path" -> responses.keys.toSet
+      assertTrue(
+        statuses.toMap == Map(
+          "GET /api/accounts"           -> Set("200", "400"),
+          "GET /api/accounts/{id}"      -> Set("200", "404"),
+          "POST /api/accounts/lookup"   -> Set("200", "400", "404"),
+          "POST /api/accounts"          -> Set("201", "400", "409"),
+          "POST /api/accounts/transfer" -> Set("200", "400", "404", "409", "422")
+        )
       )
     }
   ).provide(testLayer, Runtime.removeDefaultLoggers >>> ZTestLogger.default)

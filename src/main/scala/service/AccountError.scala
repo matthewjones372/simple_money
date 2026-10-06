@@ -1,34 +1,52 @@
 package service
 
+/**
+ * Why an account operation failed, in four kinds. Each service method's error
+ * type names the kinds it can fail with, so the HTTP layer can declare exactly
+ * the statuses an endpoint can return.
+ */
 sealed trait AccountError
 
 object AccountError:
-  case object AccountDoesNotExist extends AccountError
 
-  case object AccountHasInsufficientFunds extends AccountError
+  /** The request is invalid in itself */
+  sealed trait Invalid extends AccountError
 
-  case object AccountAlreadyExists extends AccountError
+  /** Something the request names does not exist */
+  sealed trait Missing extends AccountError
 
-  case object CannotTransferToSameAccount extends AccountError
+  /** The request conflicts with something already there */
+  sealed trait Conflicting extends AccountError
 
-  case object CannotTransferToAccountWithDifferentCurrency extends AccountError
+  /** A valid request that the accounts, as they stand, cannot carry out */
+  sealed trait Refused extends AccountError
 
-  case object TransferAmountNotPositive extends AccountError
+  case object AccountDoesNotExist extends Missing
 
-  case object CannotOpenAccountWithNegativeBalance extends AccountError
+  case object AccountHasInsufficientFunds extends Refused
 
-  case object AmountHasTooManyDecimalPlaces extends AccountError
+  case object AccountAlreadyExists extends Conflicting
 
-  case object AmountTooLarge extends AccountError
+  case object CannotTransferToSameAccount extends Invalid
 
-  case object UnknownCurrency extends AccountError
+  case object CannotTransferToAccountWithDifferentCurrency extends Refused
 
-  case object InvalidAccountNumber extends AccountError
+  case object TransferAmountNotPositive extends Invalid
 
-  case object IdempotencyKeyReusedForDifferentTransfer extends AccountError
+  case object CannotOpenAccountWithNegativeBalance extends Invalid
 
-  case object IdempotencyKeyIsBlank extends AccountError
+  case object AmountHasTooManyDecimalPlaces extends Invalid
 
-  case object InvalidPageSize extends AccountError
+  case object AmountTooLarge extends Invalid
 
-  case object InvalidCursor extends AccountError
+  case object UnknownCurrency extends Invalid
+
+  case object InvalidAccountNumber extends Invalid
+
+  case object IdempotencyKeyReusedForDifferentTransfer extends Conflicting
+
+  case object IdempotencyKeyIsBlank extends Invalid
+
+  case object InvalidPageSize extends Invalid
+
+  case object InvalidCursor extends Invalid

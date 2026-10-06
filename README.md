@@ -163,8 +163,10 @@ Every failure has a JSON body with a stable `error` code to match on and a `mess
   kept in memory for the life of the process, like the accounts. The tests race many transfers at once, including
   ones that together ask for more than the balance and ones running in both directions, and check that no account
   is overdrawn and the total is unchanged.
-- Errors as values: Failures are a sealed `AccountError` type in the ZIO error channel rather than
-  exceptions.
+- Errors as values: Failures are a sealed `AccountError` type in the ZIO error channel rather than exceptions, in four
+  kinds: invalid (400), missing (404), conflicting (409) and refused (422). Each service method's error type names
+  only the kinds it can fail with, and each endpoint declares only the matching statuses, so the Swagger page lists
+  exactly what an endpoint can return, and returning an undeclared status does not compile.
 - OpenAPI: The routes are implemented from ZIO HTTP endpoints, so the Swagger page describes what the server does.
   Requests must be JSON. A request that does not decode gets the same error body as any other failure.
 

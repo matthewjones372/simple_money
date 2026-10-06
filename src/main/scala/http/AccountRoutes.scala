@@ -61,21 +61,20 @@ object AccountRoutes:
       .query(HttpCodec.query[Int]("limit").optional)
       .query(HttpCodec.query[UUID]("after").optional)
       .out[AccountPageResponse]
-      .outErrors[ApiError](ApiError.badRequest, ApiError.notFound)
+      .outError[ApiError.BadRequest](Status.BadRequest)
       .copy(codecError = ApiError.requestCodecError)
 
   private val getAccountEndpoint =
     Endpoint(RoutePattern.GET / "api" / "accounts" / PathCodec.uuid("id"))
       .out[AccountResponse]
-      .outErrors[ApiError](ApiError.badRequest, ApiError.notFound)
-      .copy(codecError = ApiError.requestCodecError)
+      .outError[ApiError.NotFound](Status.NotFound)
 
   // A POST, so the account number travels in the body rather than the URL
   private val lookupEndpoint =
     Endpoint(RoutePattern.POST / "api" / "accounts" / "lookup")
       .in[LookupRequest]
       .out[AccountResponse]
-      .outErrors[ApiError](ApiError.badRequest, ApiError.notFound)
+      .outErrors[ApiError.BadRequest | ApiError.NotFound](ApiError.badRequest, ApiError.notFound)
       .copy(codecError = ApiError.requestCodecError)
 
   private val postAccountEndpoint =
@@ -83,7 +82,7 @@ object AccountRoutes:
       .in[PostNewAccountRequest]
       .out[AccountResponse](Status.Created)
       .outHeader(HeaderCodec.location)
-      .outErrors[ApiError](ApiError.badRequest, ApiError.conflict)
+      .outErrors[ApiError.BadRequest | ApiError.Conflict](ApiError.badRequest, ApiError.conflict)
       .copy(codecError = ApiError.requestCodecError)
 
   private val transferEndpoint =
@@ -109,19 +108,19 @@ object AccountRoutes:
     AccountService
       .listAccounts(after.map(AccountId(_)), limit.getOrElse(defaultPageSize))
       .map(toAccountPageResponse)
-      .mapError(ApiError.from)
+      .mapError(ApiError.invalid)
 
   private val getAccount = getAccountEndpoint.implement: id =>
     AccountService
       .getAccount(AccountId(id))
       .map(toAccountResponse)
-      .mapError(ApiError.from)
+      .mapError(ApiError.missing)
 
   private val lookup = lookupEndpoint.implement: request =>
     AccountService
       .findAccount(AccountNumber(request.accountNumber))
       .map(toAccountResponse)
-      .mapError(ApiError.from)
+      .mapError(ApiError.missing)
 
   private val postAccount = postAccountEndpoint.implement: request =>
     (for
@@ -131,7 +130,9 @@ object AccountRoutes:
       account <-
         AccountService.openAccount(AccountNumber(request.accountNumber), Money(plain(request.balance), currency))
     yield (toAccountResponse(account), location(account)))
-      .mapError(ApiError.from)
+      .mapError:
+        case error: AccountError.Invalid     => ApiError.invalid(error)
+        case error: AccountError.Conflicting => ApiError.conflicting(error)
 
   private val transfer = transferEndpoint.implement: (idempotencyKey, request) =>
     (ZIO.fail(AccountError.IdempotencyKeyIsBlank).when(idempotencyKey.isBlank) *>

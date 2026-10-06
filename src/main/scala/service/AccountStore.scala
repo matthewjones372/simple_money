@@ -17,11 +17,11 @@ trait AccountStore:
 
   def getAllAccounts: UIO[Seq[CurrencyAccount]]
 
-  def getAccount(accountNumber: AccountNumber): IO[AccountError, CurrencyAccount]
+  def getAccount(accountNumber: AccountNumber): IO[AccountDoesNotExist.type, CurrencyAccount]
 
-  def getAccountById(id: AccountId): IO[AccountError, CurrencyAccount]
+  def getAccountById(id: AccountId): IO[AccountDoesNotExist.type, CurrencyAccount]
 
-  def postAccount(account: CurrencyAccount): IO[AccountError, Unit]
+  def postAccount(account: CurrencyAccount): IO[AccountAlreadyExists.type, Unit]
 
   /**
    * Applies `update` to both accounts in one transaction and records the
@@ -42,13 +42,13 @@ object AccountStore:
   def getAllAccounts: URIO[AccountStore, Seq[CurrencyAccount]] =
     ZIO.serviceWithZIO[AccountStore](_.getAllAccounts)
 
-  def getAccount(accountNumber: AccountNumber): ZIO[AccountStore, AccountError, CurrencyAccount] =
+  def getAccount(accountNumber: AccountNumber): ZIO[AccountStore, AccountDoesNotExist.type, CurrencyAccount] =
     ZIO.serviceWithZIO[AccountStore](_.getAccount(accountNumber))
 
-  def getAccountById(id: AccountId): ZIO[AccountStore, AccountError, CurrencyAccount] =
+  def getAccountById(id: AccountId): ZIO[AccountStore, AccountDoesNotExist.type, CurrencyAccount] =
     ZIO.serviceWithZIO[AccountStore](_.getAccountById(id))
 
-  def postAccount(account: CurrencyAccount): ZIO[AccountStore, AccountError, Unit] =
+  def postAccount(account: CurrencyAccount): ZIO[AccountStore, AccountAlreadyExists.type, Unit] =
     ZIO.serviceWithZIO[AccountStore](_.postAccount(account))
 
   def transfer(key: IdempotencyKey, instruction: TransferInstruction)(
@@ -70,7 +70,7 @@ private case class InMemoryAccountStore(
 
   override def getAccount(
     accountNumber: AccountNumber
-  ): IO[AccountError, CurrencyAccount] =
+  ): IO[AccountDoesNotExist.type, CurrencyAccount] =
     accounts
       .get(accountNumber)
       .commit
@@ -78,14 +78,14 @@ private case class InMemoryAccountStore(
         case Some(account) => ZIO.succeed(account)
         case None          => ZIO.fail(AccountDoesNotExist)
 
-  override def getAccountById(id: AccountId): IO[AccountError, CurrencyAccount] =
+  override def getAccountById(id: AccountId): IO[AccountDoesNotExist.type, CurrencyAccount] =
     STM.atomically:
       for
         number  <- accountNumbers.get(id).someOrFail(AccountDoesNotExist)
         account <- accounts.get(number).someOrFail(AccountDoesNotExist)
       yield account
 
-  override def postAccount(account: CurrencyAccount): IO[AccountError, Unit] =
+  override def postAccount(account: CurrencyAccount): IO[AccountAlreadyExists.type, Unit] =
     STM.atomically:
       accounts
         .contains(account.accountNumber)
