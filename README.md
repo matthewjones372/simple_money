@@ -50,8 +50,9 @@ curl -X POST localhost:8081/api/accounts -H 'Content-Type: application/json' -d 
 {"message": "Successfully added GB29 NWBK 6016 1331 3282 19 into the datastore"}
 ```
 
-`currencyCode` is an ISO 4217 code. The balance cannot be negative or have more decimal places than the currency
-allows, so `50.001` GBP is refused. See [Errors](#errors) for what a failure returns.
+`currencyCode` is an ISO 4217 code. The balance cannot be negative, cannot reach 1,000,000,000,000,000 (at most 15
+digits before the decimal point) and cannot have more decimal places than the currency allows, so `50.001` GBP is
+refused. See [Errors](#errors) for what a failure returns.
 
 ### List accounts
 
@@ -125,6 +126,7 @@ Every failure has a JSON body with a stable `error` code to match on and a `mess
 | 400 | `UnknownCurrency` | The currency code is not ISO 4217 |
 | 400 | `CannotOpenAccountWithNegativeBalance` | A new account has a negative balance |
 | 400 | `AmountHasTooManyDecimalPlaces` | An amount is finer than its currency's minor unit |
+| 400 | `AmountTooLarge` | An opening balance or transfer amount is 1,000,000,000,000,000 or more |
 | 400 | `TransferAmountNotPositive` | A transfer amount is zero or less |
 | 400 | `CannotTransferToSameAccount` | A transfer names the same account twice |
 | 400 | `IdempotencyKeyIsBlank` | The `Idempotency-Key` header is blank |
@@ -158,7 +160,9 @@ final case class Money(amount: BigDecimal, currency: Currency)
 ```
 
 `Money` only adds, subtracts and compares amounts of the same currency, and knows whether an amount fits its
-currency's minor unit.
+currency's minor unit. Adding and subtracting are exact: Scala's `BigDecimal` arithmetic rounds to 34 significant
+digits, so `Money` uses Java's, which does not. Balances can grow past the 15-digit limit on what comes in without
+losing a penny. Amounts written in exponent form, such as `1e3`, come back as plain numbers.
 
 ## Possible next steps
 

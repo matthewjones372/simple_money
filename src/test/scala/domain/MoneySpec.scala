@@ -24,6 +24,27 @@ object MoneySpec extends ZIOSpecDefault:
         !smallerCovers
       )
     },
+    test("adds and subtracts exactly, however many digits the result has") {
+      val large      = Money(BigDecimal("1e40"), gbp)
+      val penny      = Money(BigDecimal("0.01"), gbp)
+      val sum        = large + penny
+      val difference = (large + penny) - large
+      assertTrue(
+        sum.amount == BigDecimal("10000000000000000000000000000000000000000.01"),
+        difference.amount == BigDecimal("0.01")
+      )
+    },
+    test("knows whether an amount is below the maximum") {
+      assertTrue(
+        Money(BigDecimal("999999999999999.99"), gbp).isWithinMaximum,
+        !Money(BigDecimal("1e15"), gbp).isWithinMaximum,
+        !Money(BigDecimal("-1e15"), gbp).isWithinMaximum,
+        !Money(BigDecimal("1e999999999"), gbp).isWithinMaximum,
+        Money(BigDecimal("1e-999999999"), gbp).isWithinMaximum,
+        Money(BigDecimal(0), gbp).isWithinMaximum,
+        Money(BigDecimal("0E+20"), gbp).isWithinMaximum
+      )
+    },
     test("refuses to combine amounts of different currencies") {
       for
         sum        <- ZIO.attempt(Money(10, gbp) + Money(1, eur)).either

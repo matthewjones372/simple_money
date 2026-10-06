@@ -27,6 +27,7 @@ final class AccountTransferService(accounts: AccountService):
   def addNewAccount(account: CurrencyAccount): IO[AccountError, Unit] =
     for
       _ <- ZIO.fromEither(nonNegativeOpeningBalance(account.balance))
+      _ <- ZIO.fromEither(withinMaximum(account.balance.amount))
       _ <- ZIO.fromEither(fitsMinorUnit(account.balance))
       _ <- accounts.postAccount(account)
     yield ()
@@ -40,6 +41,7 @@ final class AccountTransferService(accounts: AccountService):
     val instruction = TransferInstruction(fromAccountNumber, toAccountNumber, transferAmount)
     for
       _       <- ZIO.fromEither(positiveTransferAmount(transferAmount))
+      _       <- ZIO.fromEither(withinMaximum(transferAmount))
       _       <- ZIO.fromEither(areDifferentAccounts(fromAccountNumber, toAccountNumber))
       outcome <- accounts.transfer(key, instruction): (fromAccount, toAccount) =>
                    val amount = Money(transferAmount, fromAccount.currency)
@@ -72,6 +74,10 @@ final class AccountTransferService(accounts: AccountService):
   private def nonNegativeOpeningBalance(balance: Money): Either[AccountError, Unit] =
     if !balance.isNegative then Right(())
     else Left(CannotOpenAccountWithNegativeBalance)
+
+  private def withinMaximum(amount: BigDecimal): Either[AccountError, Unit] =
+    if Money.isWithinMaximum(amount) then Right(())
+    else Left(AmountTooLarge)
 
   private def fitsMinorUnit(amount: Money): Either[AccountError, Unit] =
     if amount.fitsMinorUnit then Right(())

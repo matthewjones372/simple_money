@@ -131,6 +131,31 @@ object AccountRoutesSpec extends ZIOSpecDefault:
         jpy <- postAccount("B", "100.5", "JPY").flatMap(badRequest("AmountHasTooManyDecimalPlaces"))
       yield gbp && jpy
     },
+    test("rejects an amount at or above the maximum, however it is written") {
+      for
+        large     <- postAccount("A", "1e40", "GBP").flatMap(badRequest("AmountTooLarge"))
+        exponent  <- postAccount("B", "1e999999999", "GBP").flatMap(badRequest("AmountTooLarge"))
+        _         <- postAccount("C", "10", "GBP")
+        _         <- postAccount("D", "0", "GBP")
+        overLimit <- transfer("C", "D", "1e15").flatMap(badRequest("AmountTooLarge"))
+        huge      <- transfer("C", "D", "1e999999999").flatMap(badRequest("AmountTooLarge"))
+        tiny      <- transfer("C", "D", "1e-999999999").flatMap(badRequest("AmountHasTooManyDecimalPlaces"))
+      yield large && exponent && overLimit && huge && tiny
+    },
+    test("writes amounts sent in exponent form as plain numbers") {
+      for
+        _        <- postAccount("A", "1e3", "GBP")
+        _        <- postAccount("B", "0", "GBP")
+        response <- transfer("A", "B", "2e2")
+        message  <- decode[SuccessResponse](response)
+        body     <- get("/api/accounts").flatMap(_.body.asString)
+      yield assertTrue(
+        message == SuccessResponse("200 has been transferred from A to B"),
+        body.contains("\"balance\":800"),
+        body.contains("\"balance\":200"),
+        !body.contains("E+")
+      )
+    },
     test("rejects an unknown currency") {
       postAccount("A", "10", "ZZZ").flatMap(badRequest("UnknownCurrency"))
     },
