@@ -90,7 +90,7 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
     }.provide(testLayer),
     test("should not transfer funds when a negative transfer is requested") {
       for {
-        _ <- setupAccounts
+        _      <- setupAccounts
         result <-
           accountTransfer(accountWithGBP, accountWithPositiveFunds, CurrencyAmount(-100)).either
       } yield assertTrue(result == Left(CannotTransferNegativeAmount))
@@ -98,7 +98,7 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
     test("should not transfer funds when there is no account to transfer to") {
       val nonExistingAccount = AccountNumber("SOME_NON_EXISTING_ACCOUNT")
       for {
-        _ <- setupAccounts
+        _      <- setupAccounts
         result <-
           accountTransfer(accountWithPositiveFunds, nonExistingAccount, CurrencyAmount(2)).either
         account <- AccountService.getAccount(accountWithPositiveFunds)
@@ -109,9 +109,8 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
     }.provide(testLayer),
     test("should not transfer when funds are not sufficient") {
       for {
-        _ <- setupAccounts
-        result <- accountTransfer(accountWithNegativeFunds, accountWithPositiveFunds, CurrencyAmount(200))
-                    .either
+        _        <- setupAccounts
+        result   <- accountTransfer(accountWithNegativeFunds, accountWithPositiveFunds, CurrencyAmount(200)).either
         account1 <- AccountService.getAccount(accountWithNegativeFunds)
         account2 <- AccountService.getAccount(accountWithPositiveFunds)
       } yield assertTrue(
@@ -122,9 +121,8 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
     }.provide(testLayer),
     test("should not be able to transfer between the same account") {
       for {
-        _ <- setupAccounts
-        result <- accountTransfer(accountWithPositiveFunds, accountWithPositiveFunds, CurrencyAmount(30))
-                    .either
+        _       <- setupAccounts
+        result  <- accountTransfer(accountWithPositiveFunds, accountWithPositiveFunds, CurrencyAmount(30)).either
         account <- AccountService.getAccount(accountWithPositiveFunds)
       } yield assertTrue(
         result == Left(CannotTransferToSameAccount),
@@ -142,8 +140,8 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
       val toAccount   = AccountNumber("CONCURRENT_TO")
 
       for {
-        _ <- AccountService.postAccount(CurrencyAccount(fromAccount, CurrencyAmount(500), gbp))
-        _ <- AccountService.postAccount(CurrencyAccount(toAccount, CurrencyAmount(0), gbp))
+        _        <- AccountService.postAccount(CurrencyAccount(fromAccount, CurrencyAmount(500), gbp))
+        _        <- AccountService.postAccount(CurrencyAccount(toAccount, CurrencyAmount(0), gbp))
         transfers = ZIO.foreachPar(1 to 100) { _ =>
                       accountTransfer(fromAccount, toAccount, CurrencyAmount(1))
                     }
@@ -160,8 +158,8 @@ object AccountServiceHttpSpec extends ZIOSpecDefault {
       val toAccount   = AccountNumber("RETRIED_TO")
 
       for {
-        _ <- AccountService.postAccount(CurrencyAccount(fromAccount, CurrencyAmount(500), gbp))
-        _ <- AccountService.postAccount(CurrencyAccount(toAccount, CurrencyAmount(0), gbp))
+        _        <- AccountService.postAccount(CurrencyAccount(fromAccount, CurrencyAmount(500), gbp))
+        _        <- AccountService.postAccount(CurrencyAccount(toAccount, CurrencyAmount(0), gbp))
         outcomes <- ZIO.foreachPar(1 to 100) { _ =>
                       AccountTransferService.accountTransfer(
                         IdempotencyKey("retried"),

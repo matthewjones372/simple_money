@@ -18,7 +18,7 @@ case class ErrorResponse(error: String, message: String)
 case class SuccessResponse(message: String)
 
 object Schemas:
-  given accountResponseSchema: Schema[AccountResponse] = DeriveSchema.gen[AccountResponse]
+  given accountResponseSchema: Schema[AccountResponse]         = DeriveSchema.gen[AccountResponse]
   given accountResponseSeqSchema: Schema[Seq[AccountResponse]] =
     Schema.list[AccountResponse].transform(_.toSeq, _.toList)
   given postAccountRequestSchema: Schema[PostNewAccountRequest] = DeriveSchema.gen[PostNewAccountRequest]

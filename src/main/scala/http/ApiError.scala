@@ -7,8 +7,9 @@ import zio.http.codec.{HttpCodec, HttpCodecError, HttpCodecType}
 import zio.schema.Schema
 
 /**
- * An error response, sent with the status of its case. Every case has the same `ErrorResponse` body, whose `error` is
- * a stable code for clients to match on and whose `message` is for people.
+ * An error response, sent with the status of its case. Every case has the same
+ * `ErrorResponse` body, whose `error` is a stable code for clients to match on
+ * and whose `message` is for people.
  */
 sealed trait ApiError:
   def body: ErrorResponse
@@ -79,8 +80,8 @@ object ApiError:
         )
 
   /**
-   * Replaces ZIO HTTP's own response for a request it cannot decode, which is HTML by default and names its internal
-   * types, with a `400` `ErrorResponse`.
+   * Replaces ZIO HTTP's own response for a request it cannot decode, which is
+   * HTML by default and names its internal types, with a `400` `ErrorResponse`.
    */
   val requestCodecError: HttpCodec[HttpCodecType.ResponseType, HttpCodecError] =
     HttpCodec

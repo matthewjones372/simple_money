@@ -26,8 +26,8 @@ final class AccountTransferService(accounts: AccountService):
   ): IO[TransferServiceErrors, TransferOutcome] =
     val instruction = TransferInstruction(fromAccountNumber, toAccountNumber, transferAmount)
     for
-      _ <- ZIO.fromEither(nonNegativeTransferAmount(transferAmount))
-      _ <- ZIO.fromEither(areDifferentAccounts(fromAccountNumber, toAccountNumber))
+      _       <- ZIO.fromEither(nonNegativeTransferAmount(transferAmount))
+      _       <- ZIO.fromEither(areDifferentAccounts(fromAccountNumber, toAccountNumber))
       outcome <- accounts.transfer(key, instruction): (fromAccount, toAccount) =>
                    for
                      _ <- haveSameCurrency(fromAccount, toAccount)
@@ -56,51 +56,39 @@ final class AccountTransferService(accounts: AccountService):
       s"""${before.currency.getCurrencyCode} to ${after.balance.value} ${after.currency.getCurrencyCode}"""
 
   private def nonNegativeTransferAmount(transferAmount: CurrencyAmount): Either[TransferServiceErrors, Unit] =
-    if transferAmount.value > 0 then
-      Right(())
-    else
-      Left(CannotTransferNegativeAmount)
+    if transferAmount.value > 0 then Right(())
+    else Left(CannotTransferNegativeAmount)
 
   private def nonNegativeOpeningBalance(balance: CurrencyAmount): Either[TransferServiceErrors, Unit] =
-    if balance.value >= 0 then
-      Right(())
-    else
-      Left(CannotOpenAccountWithNegativeBalance)
+    if balance.value >= 0 then Right(())
+    else Left(CannotOpenAccountWithNegativeBalance)
 
   // Currencies without minor units, such as XAU, report -1 and are not limited
   private def fitsCurrency(amount: CurrencyAmount, currency: Currency): Either[TransferServiceErrors, Unit] =
     val fractionDigits = currency.getDefaultFractionDigits
-    if fractionDigits < 0 || amount.value.bigDecimal.stripTrailingZeros.scale <= fractionDigits then
-      Right(())
-    else
-      Left(AmountHasTooManyDecimalPlaces)
+    if fractionDigits < 0 || amount.value.bigDecimal.stripTrailingZeros.scale <= fractionDigits then Right(())
+    else Left(AmountHasTooManyDecimalPlaces)
 
   private def hasSufficientBalance(
     account: CurrencyAccount,
     transferAmount: CurrencyAmount
   ): Either[TransferServiceErrors, Unit] =
-    if account.balance >= transferAmount then
-      Right(())
-    else
-      Left(AccountHasInsufficientFunds)
+    if account.balance >= transferAmount then Right(())
+    else Left(AccountHasInsufficientFunds)
 
   private def haveSameCurrency(
     fromAccount: CurrencyAccount,
     toAccount: CurrencyAccount
   ): Either[TransferServiceErrors, Unit] =
-    if fromAccount.currency.equals(toAccount.currency) then
-      Right(())
-    else
-      Left(CannotTransferToAccountWithDifferentCurrency)
+    if fromAccount.currency.equals(toAccount.currency) then Right(())
+    else Left(CannotTransferToAccountWithDifferentCurrency)
 
   private def areDifferentAccounts(
     fromAccountNumber: AccountNumber,
     toAccountNumber: AccountNumber
   ): Either[TransferServiceErrors, Unit] =
-    if fromAccountNumber != toAccountNumber then
-      Right(())
-    else
-      Left(CannotTransferToSameAccount)
+    if fromAccountNumber != toAccountNumber then Right(())
+    else Left(CannotTransferToSameAccount)
 
 object AccountTransferService:
   val layer: URLayer[AccountService, AccountTransferService] =
