@@ -126,7 +126,8 @@ object AccountRoutesSpec extends ZIOSpecDefault {
         _              <- postAccount("B", "10", "EUR")
         missing        <- transfer("X", "A", "1").flatMap(assertError(_, "AccountDoesNotExist"))
         sameAccount    <- transfer("A", "A", "1").flatMap(assertError(_, "CannotTransferToSameAccount"))
-        otherCurrency  <- transfer("A", "B", "1").flatMap(assertError(_, "CannotTransferToAccountWithDifferentCurrency"))
+        otherCurrency  <- transfer("A", "B", "1")
+                            .flatMap(assertError(_, "CannotTransferToAccountWithDifferentCurrency"))
         negativeAmount <- transfer("A", "B", "-1").flatMap(assertError(_, "CannotTransferNegativeAmount"))
       } yield missing && sameAccount && otherCurrency && negativeAmount
     },
